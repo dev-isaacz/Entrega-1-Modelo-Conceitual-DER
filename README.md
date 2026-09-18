@@ -1,6 +1,12 @@
 # Entrega 1 — Modelo Conceitual (DER)
 ### Modelagem de um sistema de gestão de informações para uma organização de pequeno porte
 
+# Grupo da apresentação:
+### - Gabriel Diniz Tavares da Costa - RGM 48222721
+### - Isaac Santos Alves da Costa - RGM 48222852
+### - Rafael Aceiro Ferreira Gomes - RGM 1748225223
+### - Paulo Henrique Fernandez Prado - RGM  48100650
+
 > **Organização:** Açougue *[PREENCHER: nome fantasia do estabelecimento]*
 > O DER é anexado separadamente a este repositório (em imagem).
 
