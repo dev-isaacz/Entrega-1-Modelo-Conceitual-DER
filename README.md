@@ -7,14 +7,13 @@
 ### - Rafael Aceiro Ferreira Gomes - RGM 1748225223
 ### - Paulo Henrique Fernandez Prado - RGM  48100650
 
-> **Organização:** Açougue *[PREENCHER: nome fantasia do estabelecimento]*
-> O DER é anexado separadamente a este repositório (em imagem).
+> **Organização:** Casa de Carnes Rotineira Caroline*
 
 ---
 
 ## 1. Caracterização da Organização
 
-- **Nome e natureza da organização:** *[PREENCHER: nome do açougue]*, comércio varejista de carnes, produtos congelados e mercearia, com fins lucrativos, único estabelecimento (sem filiais).
+- **Nome e natureza da organização:** *Casa de Carnes Rotineira Caroline*, comércio varejista de carnes, produtos congelados e mercearia, com fins lucrativos, único estabelecimento (sem filiais).
 - **Contexto e porte:** Estabelecimento em funcionamento há mais de 15 anos, formalizado e com CNPJ ativo. A operação conta com 12 pessoas: 1 proprietário, 5 açougueiros, 2 balconistas, 2 operadores de caixa, 1 ajudante geral, 1 entregador e 1 responsável administrativo-financeiro. Funciona de segunda a sábado das 7h30 às 20h, e aos domingos e feriados das 7h30 às 14h, com um volume médio de 300 a 400 vendas por dia — o que caracteriza uma operação de médio porte para os padrões do setor.
 - **Problemas e necessidades identificados:** O estabelecimento já utiliza um sistema de gestão para cadastro de produtos, preços e registro de vendas no caixa, mas diversos controles importantes ainda são feitos de forma manual/visual e ficam fora do sistema:
   - Não há cadastro de fornecedores no sistema (contatos ficam na agenda pessoal do proprietário), embora a função exista.
@@ -24,7 +23,10 @@
   - As vendas a prazo/fiado são controladas por planilha e vias de pedido assinadas, fora do sistema, gerando trabalho manual de conciliação pela responsável financeira.
   - Não há rastreabilidade centralizada de lote/validade — as informações ficam dispersas em etiquetas e embalagens.
 - **Justificativa da escolha:** O açougue é uma organização real, de porte adequado ao trabalho (nem tão simples a ponto de faltar processos, nem grande/complexa a ponto de ser inviável nesta etapa), com processos de negócio ricos e específicos do setor (compra e desossa de carne, controle de validade, venda por peso, venda a prazo/fiado, delivery) que geram entidades e regras de negócio suficientes para uma modelagem conceitual completa. Além disso, o grupo teve acesso direto ao proprietário para o levantamento de requisitos em campo.
-- **Evidências da organização:** *[PREENCHER: link do Google Maps/Google Meu Negócio ou rede social do açougue, endereço completo, telefone/WhatsApp de contato, e fotos da visita/entrevista]*
+- **Evidências da organização:**
+- Maps: [https://share.google/IGnQx2U8OIvA5kZfN](https://share.google/CrfXLHk7lsByWl3Y8)
+- Whatsapp: 11 96283-0823
+- CNPJ
 
 ---
 
@@ -279,7 +281,7 @@ flowchart TD
 
 ## 8. Justificativa Técnica
 
-*[PREENCHER PELO GRUPO: com base nas entidades e relacionamentos propostos acima, explicar por que essas entidades/atributos/cardinalidades foram escolhidos e não outras alternativas — por exemplo: por que Venda a Prazo é uma entidade separada de Venda em vez de apenas um atributo; por que Cliente é opcional na Venda; por que Item de Pedido de Compra e Item de Venda são entidades associativas separadas.]*
+*[PREENCHER PELO GRUPO:]*
 
 ---
 
@@ -292,11 +294,10 @@ flowchart TD
 | **Prompt(s) utilizados** | "Quero que você faça o read.me do nosso projeto com base nas informações que já te foram passadas e no esqueleto da entrega 1", seguido do envio do documento completo de levantamento de informações do estabelecimento. |
 | **Resposta recebida** | Um rascunho de README organizado nas seções do esqueleto, com fluxogramas em Mermaid, requisitos funcionais/não funcionais, regras de negócio, dicionário de dados preliminar e proposta de entidades/relacionamentos para o modelo conceitual, todos derivados diretamente das respostas da entrevista. |
 | **Fontes consultadas e verificadas** | Nenhuma fonte externa foi usada — o conteúdo foi derivado exclusivamente das respostas fornecidas pelo grupo a partir da entrevista de campo. |
-| **Trechos rejeitados ou corrigidos** | *[PREENCHER PELO GRUPO após revisão: indicar o que foi ajustado — por exemplo, nomes de entidades renomeados, atributos removidos/adicionados, cardinalidades revisadas]* |
-| **Justificativa da escolha final** | *[PREENCHER PELO GRUPO: por que mantiveram, adaptaram ou rejeitaram partes da proposta]* |
+| **Trechos rejeitados ou corrigidos** | *[PREENCHER PELO GRUPO após revisaõ}* 
+| **Justificativa da escolha final** | *[PREENCHER PELO GRUPO* |
 | **Reflexão crítica** | A IA não teve acesso à visita física ao estabelecimento nem a informações não mencionadas na entrevista, de forma que entidades/regras não citadas no levantamento (ex.: rastreabilidade de lote, controle de perdas) foram tratadas apenas como requisitos de melhoria, não como funcionalidades já existentes. O grupo deve validar se a proposta de entidades reflete fielmente a operação observada em campo. |
 
-*Se o grupo utilizou outras ferramentas de IA em outras etapas (pesquisa, revisão ortográfica, apresentação), registrar aqui também.*
 
 ---
 
