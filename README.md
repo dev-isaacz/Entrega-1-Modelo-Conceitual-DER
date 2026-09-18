@@ -42,8 +42,6 @@
 
 ### 2.2 Fluxogramas
 
-*(Fluxogramas em imagem/anexo ainda devem ser incluídos no repositório conforme exigido pelo enunciado. Os diagramas abaixo, em Mermaid, são renderizados nativamente pelo GitHub e servem de rascunho/base visual dos processos-chave.)*
-
 **Processo de compra e recebimento**
 ```mermaid
 flowchart TD
