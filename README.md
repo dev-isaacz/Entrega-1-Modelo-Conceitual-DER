@@ -4,7 +4,7 @@
 **Grupo:**
 - Gabriel Diniz Tavares da Costa — RGM 48222721
 - Isaac Santos Alves da Costa — RGM 48222852
-- Rafael Aceiro Ferreira Gomes — RGM 1748225223
+- Rafael Aceiro Ferreira Gomes — RGM 48225223
 - Paulo Henrique Fernandez Prado — RGM 48100650
 
 **Organização:** Casa de Carnes Rotineira Caroline
