@@ -3,11 +3,12 @@
 -- Grupo: Gabriel Diniz Tavares da Costa, Isaac Santos Alves da Costa,
 --        Rafael Aceiro Ferreira Gomes, Paulo Henrique Fernandez Prado
 -- Script SQL — Entrega 2
--- SGBD: MySQL 8.0+  |  Codificacao: utf8mb4  |  Engine: InnoDB
+-- SGBD: MySQL 8.0.16+ (CHECK exige 8.0.16+)  |  Codificacao: utf8mb4  |  Engine: InnoDB
 --
 -- Como executar:
 --   1) Rode este arquivo inteiro de uma vez (ele recria o banco do zero).
---   2) Testado em MySQL Workbench
+--   2) Ordem: CREATE DATABASE -> CREATE TABLE -> INSERT -> SELECT com JOIN -> UPDATE
+--      -> DELETE -> consultas gerenciais (G) -> consultas de auditoria (A).
 -- =====================================================================================
 
 
@@ -22,315 +23,358 @@ CREATE DATABASE acougue_caroline
 
 USE acougue_caroline;
 
+-- =====================================================================================
+-- 2) CREATE TABLE + CONSTRAINTS (alinhado ao DER conceitual v2.1 e ao modelo logico)
+-- =====================================================================================
+
+-- FUNCIONARIO: Pessoa física que presta serviço ao estabelecimento em uma função definida (proprietário, açougueiro, balconista, caixa, ajudante geral, entregador ou administrativo/financeiro) e que executa e responde pelas operações registradas no sistema. Difere de CLIENTE e FORNECEDOR, que são partes externas ao estabelecimento.
+CREATE TABLE FUNCIONARIO (
+  ID_FUNCIONARIO INT NOT NULL AUTO_INCREMENT,
+  NM_FUNCIONARIO VARCHAR(100) NOT NULL,
+  TP_FUNCAO VARCHAR(20) NOT NULL,
+  NR_TELEFONE VARCHAR(11) NULL,
+  IN_ATIVO TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT PK_FUNCIONARIO PRIMARY KEY (ID_FUNCIONARIO),
+  CONSTRAINT CK_FUNCIONARIO_TP_FUNCAO CHECK (TP_FUNCAO IN ('PROPRIETARIO','ACOUGUEIRO','BALCONISTA','CAIXA','AJUDANTE_GERAL','ENTREGADOR','ADMIN_FINANCEIRO')),
+  CONSTRAINT CK_FUNCIONARIO_NR_TELEFONE CHECK (NR_TELEFONE REGEXP '^[0-9]{10,11}$'),
+  CONSTRAINT CK_FUNCIONARIO_IN_ATIVO CHECK (IN_ATIVO IN (0,1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- FORNECEDOR: Pessoa jurídica (ou produtor) que vende mercadorias ao estabelecimento mediante pedido de compra. Difere de CLIENTE porque é origem — e não destino — da mercadoria. Hoje é conhecido apenas pela agenda do celular do proprietário (problema P1).
+CREATE TABLE FORNECEDOR (
+  ID_FORNECEDOR INT NOT NULL AUTO_INCREMENT,
+  NM_FORNECEDOR VARCHAR(100) NOT NULL,
+  NR_CNPJ CHAR(14) NULL,
+  NR_TELEFONE VARCHAR(11) NOT NULL,
+  IN_HABITUAL TINYINT(1) NOT NULL DEFAULT 0,
+  CONSTRAINT PK_FORNECEDOR PRIMARY KEY (ID_FORNECEDOR),
+  CONSTRAINT UQ_FORNECEDOR_NR_CNPJ UNIQUE (NR_CNPJ),
+  CONSTRAINT CK_FORNECEDOR_NR_CNPJ CHECK (NR_CNPJ REGEXP '^[0-9]{14}$'),
+  CONSTRAINT CK_FORNECEDOR_NR_TELEFONE CHECK (NR_TELEFONE REGEXP '^[0-9]{10,11}$'),
+  CONSTRAINT CK_FORNECEDOR_IN_HABITUAL CHECK (IN_HABITUAL IN (0,1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- CATEGORIA: Agrupamento de produtos que compartilham a mesma regra de armazenamento e conservação (carne bovina, suína, aves, congelados, mercearia, massas, bebidas, rotisseria, churrasco). Difere de PRODUTO por descrever o grupo, não o item vendável.
+CREATE TABLE CATEGORIA (
+  ID_CATEGORIA INT NOT NULL AUTO_INCREMENT,
+  NM_CATEGORIA VARCHAR(50) NOT NULL,
+  DS_REGRA_ARMAZENAMENTO VARCHAR(255) NOT NULL,
+  IN_PERECIVEL TINYINT(1) NOT NULL,
+  IN_EXIGE_INSPECAO TINYINT(1) NOT NULL DEFAULT 0,
+  CONSTRAINT PK_CATEGORIA PRIMARY KEY (ID_CATEGORIA),
+  CONSTRAINT UQ_CATEGORIA_NM_CATEGORIA UNIQUE (NM_CATEGORIA),
+  CONSTRAINT CK_CATEGORIA_IN_PERECIVEL CHECK (IN_PERECIVEL IN (0,1)),
+  CONSTRAINT CK_CATEGORIA_IN_EXIGE_INSPECAO CHECK (IN_EXIGE_INSPECAO IN (0,1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- CLIENTE: Pessoa física ou jurídica que compra do estabelecimento e foi cadastrada porque a operação exigiu identificação (nota com CPF, boleto, faturamento ou venda a prazo). Difere do comprador anônimo de balcão, que não é cliente cadastrado (RN09).
+CREATE TABLE CLIENTE (
+  ID_CLIENTE INT NOT NULL AUTO_INCREMENT,
+  NM_CLIENTE VARCHAR(100) NOT NULL,
+  TP_PESSOA CHAR(1) NOT NULL,
+  NR_DOCUMENTO VARCHAR(14) NOT NULL,
+  NR_TELEFONE VARCHAR(11) NOT NULL,
+  DS_LOGRADOURO VARCHAR(100) NOT NULL,
+  NR_ENDERECO VARCHAR(10) NOT NULL,
+  NM_BAIRRO VARCHAR(60) NOT NULL,
+  NR_CEP CHAR(8) NOT NULL,
+  IN_AUTORIZADO_PRAZO TINYINT(1) NOT NULL DEFAULT 0,
+  CONSTRAINT PK_CLIENTE PRIMARY KEY (ID_CLIENTE),
+  CONSTRAINT UQ_CLIENTE_NR_DOCUMENTO UNIQUE (NR_DOCUMENTO),
+  CONSTRAINT CK_CLIENTE_TP_PESSOA CHECK (TP_PESSOA IN ('F','J')),
+  CONSTRAINT CK_CLIENTE_NR_DOCUMENTO CHECK (NR_DOCUMENTO REGEXP '^[0-9]+$'),
+  CONSTRAINT CK_CLIENTE_NR_TELEFONE CHECK (NR_TELEFONE REGEXP '^[0-9]{10,11}$'),
+  CONSTRAINT CK_CLIENTE_NR_CEP CHECK (NR_CEP REGEXP '^[0-9]{8}$'),
+  CONSTRAINT CK_CLIENTE_IN_AUTORIZADO_PRAZO CHECK (IN_AUTORIZADO_PRAZO IN (0,1)),
+  CONSTRAINT CK_CLIENTE_DOC_TAMANHO CHECK ((TP_PESSOA = 'F' AND CHAR_LENGTH(NR_DOCUMENTO) = 11) OR (TP_PESSOA = 'J' AND CHAR_LENGTH(NR_DOCUMENTO) = 14))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PRODUTO: Item que o estabelecimento compra, armazena ou vende — corte de carne, peça inteira recebida do fornecedor, produto de mercearia, bebida ou preparado — identificado por nome único e pertencente a uma categoria. Difere de LOTE, que é uma remessa específica do produto.
+CREATE TABLE PRODUTO (
+  ID_PRODUTO INT NOT NULL AUTO_INCREMENT,
+  NM_PRODUTO VARCHAR(100) NOT NULL,
+  ID_CATEGORIA INT NOT NULL,
+  TP_UNIDADE_VENDA CHAR(2) NOT NULL,
+  VL_PRECO_VENDA DECIMAL(10,2) NULL,
+  QT_ESTOQUE_MINIMO DECIMAL(10,3) NULL,
+  IN_VENDAVEL TINYINT(1) NOT NULL DEFAULT 1,
+  IN_ATIVO TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT PK_PRODUTO PRIMARY KEY (ID_PRODUTO),
+  CONSTRAINT UQ_PRODUTO_NM_PRODUTO UNIQUE (NM_PRODUTO),
+  CONSTRAINT FK_PRODUTO_ID_CATEGORIA FOREIGN KEY (ID_CATEGORIA) REFERENCES CATEGORIA (ID_CATEGORIA),
+  CONSTRAINT CK_PRODUTO_TP_UNIDADE_VENDA CHECK (TP_UNIDADE_VENDA IN ('KG','UN')),
+  CONSTRAINT CK_PRODUTO_VL_PRECO_VENDA CHECK (VL_PRECO_VENDA >= 0),
+  CONSTRAINT CK_PRODUTO_QT_ESTOQUE_MINIMO CHECK (QT_ESTOQUE_MINIMO >= 0),
+  CONSTRAINT CK_PRODUTO_IN_VENDAVEL CHECK (IN_VENDAVEL IN (0,1)),
+  CONSTRAINT CK_PRODUTO_IN_ATIVO CHECK (IN_ATIVO IN (0,1)),
+  CONSTRAINT CK_PRODUTO_PRECO_VENDAVEL CHECK (IN_VENDAVEL = 0 OR VL_PRECO_VENDA IS NOT NULL)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PEDIDO_COMPRA: Solicitação de mercadorias feita pelo estabelecimento a um fornecedor, com data, prazo de entrega combinado e, depois do recebimento, nota fiscal e eventual divergência. Difere de VENDA porque é compra (entrada), não venda (saída).
+CREATE TABLE PEDIDO_COMPRA (
+  ID_PEDIDO_COMPRA INT NOT NULL AUTO_INCREMENT,
+  ID_FORNECEDOR INT NOT NULL,
+  ID_FUNCIONARIO INT NOT NULL,
+  DT_PEDIDO DATE NOT NULL,
+  DT_PREVISTA_ENTREGA DATE NOT NULL,
+  DT_RECEBIMENTO DATE NULL,
+  NR_NOTA_FISCAL VARCHAR(20) NULL,
+  ST_PEDIDO VARCHAR(20) NOT NULL DEFAULT 'PENDENTE',
+  DS_DIVERGENCIA VARCHAR(255) NULL,
+  CONSTRAINT PK_PEDIDO_COMPRA PRIMARY KEY (ID_PEDIDO_COMPRA),
+  CONSTRAINT FK_PEDIDO_COMPRA_ID_FORNECEDOR FOREIGN KEY (ID_FORNECEDOR) REFERENCES FORNECEDOR (ID_FORNECEDOR),
+  CONSTRAINT FK_PEDIDO_COMPRA_ID_FUNCIONARIO FOREIGN KEY (ID_FUNCIONARIO) REFERENCES FUNCIONARIO (ID_FUNCIONARIO),
+  CONSTRAINT CK_PEDIDO_COMPRA_ST_PEDIDO CHECK (ST_PEDIDO IN ('PENDENTE','RECEBIDO','RECEBIDO_DIVERGENTE','CANCELADO')),
+  CONSTRAINT CK_PEDIDO_DATAS CHECK (DT_PREVISTA_ENTREGA >= DT_PEDIDO AND (DT_RECEBIMENTO IS NULL OR DT_RECEBIMENTO >= DT_PEDIDO)),
+  CONSTRAINT CK_PEDIDO_RECEBIMENTO CHECK (ST_PEDIDO NOT IN ('RECEBIDO','RECEBIDO_DIVERGENTE') OR (DT_RECEBIMENTO IS NOT NULL AND NR_NOTA_FISCAL IS NOT NULL)),
+  CONSTRAINT CK_PEDIDO_DIVERGENCIA CHECK (ST_PEDIDO <> 'RECEBIDO_DIVERGENTE' OR DS_DIVERGENCIA IS NOT NULL),
+  KEY IDX_PEDIDO_DT (DT_PEDIDO)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ITEM_PEDIDO_COMPRA: Entidade associativa do relacionamento contém (PEDIDO_COMPRA × PRODUTO): registra cada produto solicitado em um pedido, com a quantidade pedida e o preço combinado. Existe porque a quantidade e o preço só fazem sentido para o par pedido-produto e porque cada item origina lotes.
+CREATE TABLE ITEM_PEDIDO_COMPRA (
+  ID_PEDIDO_COMPRA INT NOT NULL,
+  ID_PRODUTO INT NOT NULL,
+  QT_PEDIDA DECIMAL(10,3) NOT NULL,
+  VL_UNITARIO_COMPRA DECIMAL(10,2) NOT NULL,
+  CONSTRAINT PK_ITEM_PEDIDO_COMPRA PRIMARY KEY (ID_PEDIDO_COMPRA, ID_PRODUTO),
+  CONSTRAINT FK_ITEM_PEDIDO_COMPRA_ID_PEDIDO_COMPRA FOREIGN KEY (ID_PEDIDO_COMPRA) REFERENCES PEDIDO_COMPRA (ID_PEDIDO_COMPRA),
+  CONSTRAINT FK_ITEM_PEDIDO_COMPRA_ID_PRODUTO FOREIGN KEY (ID_PRODUTO) REFERENCES PRODUTO (ID_PRODUTO),
+  CONSTRAINT CK_ITEM_PEDIDO_COMPRA_QT_PEDIDA CHECK (QT_PEDIDA > 0),
+  CONSTRAINT CK_ITEM_PEDIDO_COMPRA_VL_UNITARIO_COMPRA CHECK (VL_UNITARIO_COMPRA >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- LOTE: Remessa de um produto recebida em um pedido de compra, identificada pelo número impresso na embalagem, pela validade e pelo registro de inspeção sanitária. Difere de PRODUTO (o item em si) por representar uma partida física específica, o que permite rastrear procedência e validade (problema P6).
+CREATE TABLE LOTE (
+  ID_LOTE INT NOT NULL AUTO_INCREMENT,
+  ID_PEDIDO_COMPRA INT NOT NULL,
+  ID_PRODUTO INT NOT NULL,
+  NR_LOTE VARCHAR(30) NULL,
+  DT_VALIDADE DATE NULL,
+  NR_REGISTRO_INSPECAO VARCHAR(20) NULL,
+  CONSTRAINT PK_LOTE PRIMARY KEY (ID_LOTE),
+  CONSTRAINT UQ_LOTE_ITEM_NR UNIQUE (ID_PEDIDO_COMPRA, ID_PRODUTO, NR_LOTE),
+  CONSTRAINT FK_LOTE_ITEM FOREIGN KEY (ID_PEDIDO_COMPRA, ID_PRODUTO) REFERENCES ITEM_PEDIDO_COMPRA (ID_PEDIDO_COMPRA, ID_PRODUTO),
+  KEY IDX_LOTE_VALIDADE (DT_VALIDADE)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- MOVIMENTACAO_ESTOQUE: Registro de uma variação no saldo de um produto — entrada por compra, saída ou entrada por desossa, descarte de vencido ou ajuste de contagem —, com quantidade, data e responsável. Difere de ITEM_VENDA porque a venda não gera movimentação: o saldo considera as vendas separadamente (RN23). Resolve os problemas P2, P4 e P6.
+CREATE TABLE MOVIMENTACAO_ESTOQUE (
+  ID_MOVIMENTACAO INT NOT NULL AUTO_INCREMENT,
+  ID_PRODUTO INT NOT NULL,
+  ID_LOTE INT NULL,
+  ID_FUNCIONARIO INT NOT NULL,
+  DT_HORA_MOVIMENTACAO DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  TP_SENTIDO CHAR(1) NOT NULL,
+  TP_MOTIVO VARCHAR(10) NOT NULL,
+  QT_MOVIMENTADA DECIMAL(10,3) NOT NULL,
+  DS_OBSERVACAO VARCHAR(255) NULL,
+  CONSTRAINT PK_MOVIMENTACAO_ESTOQUE PRIMARY KEY (ID_MOVIMENTACAO),
+  CONSTRAINT FK_MOVIMENTACAO_ESTOQUE_ID_PRODUTO FOREIGN KEY (ID_PRODUTO) REFERENCES PRODUTO (ID_PRODUTO),
+  CONSTRAINT FK_MOVIMENTACAO_ESTOQUE_ID_LOTE FOREIGN KEY (ID_LOTE) REFERENCES LOTE (ID_LOTE),
+  CONSTRAINT FK_MOVIMENTACAO_ESTOQUE_ID_FUNCIONARIO FOREIGN KEY (ID_FUNCIONARIO) REFERENCES FUNCIONARIO (ID_FUNCIONARIO),
+  CONSTRAINT CK_MOVIMENTACAO_ESTOQUE_TP_SENTIDO CHECK (TP_SENTIDO IN ('E','S')),
+  CONSTRAINT CK_MOVIMENTACAO_ESTOQUE_TP_MOTIVO CHECK (TP_MOTIVO IN ('COMPRA','DESOSSA','DESCARTE','AJUSTE')),
+  CONSTRAINT CK_MOVIMENTACAO_ESTOQUE_QT_MOVIMENTADA CHECK (QT_MOVIMENTADA > 0),
+  CONSTRAINT CK_MOV_MOTIVO_SENTIDO CHECK ((TP_MOTIVO <> 'COMPRA' OR TP_SENTIDO = 'E') AND (TP_MOTIVO <> 'DESCARTE' OR TP_SENTIDO = 'S')),
+  CONSTRAINT CK_MOV_LOTE_OBRIGATORIO CHECK (TP_MOTIVO = 'AJUSTE' OR ID_LOTE IS NOT NULL),
+  KEY IDX_MOV_PRODUTO_DATA (ID_PRODUTO, DT_HORA_MOVIMENTACAO)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- VENDA: Operação de venda de produtos a um comprador — no balcão, por telefone ou por WhatsApp —, com forma de pagamento única, eventual desconto autorizado e, se a prazo, vencimento e baixa. Inclui a encomenda (venda registrada para atendimento futuro) e a venda cancelada, que permanecem no histórico (RN18). Resolve o problema P5 (fiado/boleto fora do sistema).
+CREATE TABLE VENDA (
+  ID_VENDA INT NOT NULL AUTO_INCREMENT,
+  ID_CLIENTE INT NULL,
+  ID_FUNCIONARIO INT NOT NULL,
+  ID_FUNCIONARIO_AUTORIZADOR INT NULL,
+  DT_HORA_VENDA DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  TP_CANAL VARCHAR(10) NOT NULL,
+  TP_FORMA_PAGAMENTO VARCHAR(20) NOT NULL,
+  ST_VENDA VARCHAR(12) NOT NULL DEFAULT 'CONCLUIDA',
+  VL_DESCONTO DECIMAL(10,2) NOT NULL DEFAULT 0,
+  DT_VENCIMENTO DATE NULL,
+  DT_PAGAMENTO DATE NULL,
+  NR_CUPOM_FISCAL VARCHAR(20) NULL,
+  DT_PREVISTA_ATENDIMENTO DATE NULL,
+  CONSTRAINT PK_VENDA PRIMARY KEY (ID_VENDA),
+  CONSTRAINT FK_VENDA_ID_CLIENTE FOREIGN KEY (ID_CLIENTE) REFERENCES CLIENTE (ID_CLIENTE),
+  CONSTRAINT FK_VENDA_ID_FUNCIONARIO FOREIGN KEY (ID_FUNCIONARIO) REFERENCES FUNCIONARIO (ID_FUNCIONARIO),
+  CONSTRAINT FK_VENDA_ID_FUNCIONARIO_AUTORIZADOR FOREIGN KEY (ID_FUNCIONARIO_AUTORIZADOR) REFERENCES FUNCIONARIO (ID_FUNCIONARIO),
+  CONSTRAINT CK_VENDA_TP_CANAL CHECK (TP_CANAL IN ('BALCAO','TELEFONE','WHATSAPP')),
+  CONSTRAINT CK_VENDA_TP_FORMA_PAGAMENTO CHECK (TP_FORMA_PAGAMENTO IN ('DINHEIRO','PIX','CARTAO_CREDITO','CARTAO_DEBITO','VALE_ALIMENTACAO','BOLETO','FIADO')),
+  CONSTRAINT CK_VENDA_ST_VENDA CHECK (ST_VENDA IN ('CONCLUIDA','ENCOMENDADA','CANCELADA')),
+  CONSTRAINT CK_VENDA_VL_DESCONTO CHECK (VL_DESCONTO >= 0),
+  CONSTRAINT CK_VENDA_PRAZO_EXIGE_CLIENTE CHECK (TP_FORMA_PAGAMENTO NOT IN ('BOLETO','FIADO') OR (ID_CLIENTE IS NOT NULL AND DT_VENCIMENTO IS NOT NULL)),
+  CONSTRAINT CK_VENDA_VENCIMENTO_SO_PRAZO CHECK (TP_FORMA_PAGAMENTO IN ('BOLETO','FIADO') OR DT_VENCIMENTO IS NULL),
+  CONSTRAINT CK_VENDA_DESCONTO_AUTORIZADO CHECK (VL_DESCONTO = 0 OR ID_FUNCIONARIO_AUTORIZADOR IS NOT NULL),
+  CONSTRAINT CK_VENDA_ENCOMENDA_DATA CHECK (ST_VENDA <> 'ENCOMENDADA' OR DT_PREVISTA_ATENDIMENTO IS NOT NULL),
+  CONSTRAINT CK_VENDA_DATAS CHECK ((DT_VENCIMENTO IS NULL OR DT_VENCIMENTO >= DATE(DT_HORA_VENDA)) AND (DT_PAGAMENTO IS NULL OR DT_PAGAMENTO >= DATE(DT_HORA_VENDA))),
+  KEY IDX_VENDA_DT_HORA (DT_HORA_VENDA),
+  KEY IDX_VENDA_PRAZO (TP_FORMA_PAGAMENTO, DT_PAGAMENTO, DT_VENCIMENTO)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ITEM_VENDA: Tabela que implementa o relacionamento compõe (VENDA × PRODUTO): registra cada produto vendido em uma venda, com o peso ou quantidade vendidos e o preço unitário praticado naquele momento. O preço é guardado aqui porque o preço vigente do produto muda com o tempo.
+CREATE TABLE ITEM_VENDA (
+  ID_VENDA INT NOT NULL,
+  ID_PRODUTO INT NOT NULL,
+  QT_VENDIDA DECIMAL(10,3) NOT NULL,
+  VL_UNITARIO_VENDA DECIMAL(10,2) NOT NULL,
+  CONSTRAINT PK_ITEM_VENDA PRIMARY KEY (ID_VENDA, ID_PRODUTO),
+  CONSTRAINT FK_ITEM_VENDA_ID_VENDA FOREIGN KEY (ID_VENDA) REFERENCES VENDA (ID_VENDA),
+  CONSTRAINT FK_ITEM_VENDA_ID_PRODUTO FOREIGN KEY (ID_PRODUTO) REFERENCES PRODUTO (ID_PRODUTO),
+  CONSTRAINT CK_ITEM_VENDA_QT_VENDIDA CHECK (QT_VENDIDA > 0),
+  CONSTRAINT CK_ITEM_VENDA_VL_UNITARIO_VENDA CHECK (VL_UNITARIO_VENDA >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ENTREGA: Deslocamento de uma venda até o endereço do comprador (delivery), realizado por um entregador, com endereço de entrega, horários de saída e de recebimento e situação. Difere de VENDA porque nem toda venda é entregue: é a parte logística opcional de uma venda por telefone ou WhatsApp.
+CREATE TABLE ENTREGA (
+  ID_ENTREGA INT NOT NULL AUTO_INCREMENT,
+  ID_VENDA INT NOT NULL,
+  ID_FUNCIONARIO_ENTREGADOR INT NOT NULL,
+  DS_LOGRADOURO VARCHAR(100) NOT NULL,
+  NR_ENDERECO VARCHAR(10) NOT NULL,
+  NM_BAIRRO VARCHAR(60) NOT NULL,
+  NR_CEP CHAR(8) NOT NULL,
+  ST_ENTREGA VARCHAR(10) NOT NULL DEFAULT 'PENDENTE',
+  DT_HORA_SAIDA DATETIME NULL,
+  DT_HORA_ENTREGA DATETIME NULL,
+  CONSTRAINT PK_ENTREGA PRIMARY KEY (ID_ENTREGA),
+  CONSTRAINT UQ_ENTREGA_ID_VENDA UNIQUE (ID_VENDA),
+  CONSTRAINT FK_ENTREGA_ID_VENDA FOREIGN KEY (ID_VENDA) REFERENCES VENDA (ID_VENDA),
+  CONSTRAINT FK_ENTREGA_ID_FUNCIONARIO_ENTREGADOR FOREIGN KEY (ID_FUNCIONARIO_ENTREGADOR) REFERENCES FUNCIONARIO (ID_FUNCIONARIO),
+  CONSTRAINT CK_ENTREGA_NR_CEP CHECK (NR_CEP REGEXP '^[0-9]{8}$'),
+  CONSTRAINT CK_ENTREGA_ST_ENTREGA CHECK (ST_ENTREGA IN ('PENDENTE','EM_ROTA','ENTREGUE')),
+  CONSTRAINT CK_ENTREGA_HORARIOS CHECK (DT_HORA_ENTREGA IS NULL OR (DT_HORA_SAIDA IS NOT NULL AND DT_HORA_ENTREGA >= DT_HORA_SAIDA)),
+  CONSTRAINT CK_ENTREGA_ENTREGUE CHECK (ST_ENTREGA <> 'ENTREGUE' OR DT_HORA_ENTREGA IS NOT NULL)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- VIEW: saldo de estoque por produto = entradas - saídas (MOVIMENTACAO_ESTOQUE) - quantidades vendidas (ITEM_VENDA, exceto canceladas) — RN23
+CREATE VIEW VW_SALDO_ESTOQUE AS
+SELECT p.ID_PRODUTO, p.NM_PRODUTO,
+       COALESCE((SELECT SUM(CASE m.TP_SENTIDO WHEN 'E' THEN m.QT_MOVIMENTADA ELSE -m.QT_MOVIMENTADA END)
+                 FROM MOVIMENTACAO_ESTOQUE m WHERE m.ID_PRODUTO = p.ID_PRODUTO),0)
+     - COALESCE((SELECT SUM(i.QT_VENDIDA) FROM ITEM_VENDA i JOIN VENDA v ON v.ID_VENDA = i.ID_VENDA
+                 WHERE i.ID_PRODUTO = p.ID_PRODUTO AND v.ST_VENDA <> 'CANCELADA'),0) AS QT_SALDO
+FROM PRODUTO p;
+
+-- VIEW: total de cada venda (valor bruto, desconto e líquido) — total é derivado, não armazenado
+CREATE VIEW VW_TOTAL_VENDA AS
+SELECT v.ID_VENDA, SUM(i.QT_VENDIDA * i.VL_UNITARIO_VENDA) AS VL_BRUTO, v.VL_DESCONTO,
+       SUM(i.QT_VENDIDA * i.VL_UNITARIO_VENDA) - v.VL_DESCONTO AS VL_LIQUIDO
+FROM VENDA v JOIN ITEM_VENDA i ON i.ID_VENDA = v.ID_VENDA
+GROUP BY v.ID_VENDA, v.VL_DESCONTO;
 
 -- =====================================================================================
--- 2) CREATE TABLE 
+-- 3) INSERT INTO  (carga da massa de dados, na ordem das dependencias de FK)
 -- =====================================================================================
-
--- ---------------------------------------------------------------------------
--- FORNECEDOR
--- ---------------------------------------------------------------------------
-CREATE TABLE fornecedor (
-  id_fornecedor          INT             NOT NULL AUTO_INCREMENT,
-  nome_razao_social      VARCHAR(150)    NOT NULL,
-  telefone_whatsapp      VARCHAR(20)     NOT NULL,
-  tipo_produto_fornecido VARCHAR(100)    NOT NULL,
-  CONSTRAINT pk_fornecedor PRIMARY KEY (id_fornecedor)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- CATEGORIA_PRODUTO
--- ---------------------------------------------------------------------------
-CREATE TABLE categoria_produto (
-  id_categoria        INT          NOT NULL AUTO_INCREMENT,
-  descricao           VARCHAR(80)  NOT NULL,
-  regra_armazenamento VARCHAR(150) NULL,
-  CONSTRAINT pk_categoria_produto PRIMARY KEY (id_categoria),
-  CONSTRAINT uq_categoria_descricao UNIQUE (descricao)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- FUNCIONARIO
--- ---------------------------------------------------------------------------
-CREATE TABLE funcionario (
-  id_funcionario INT          NOT NULL AUTO_INCREMENT,
-  nome           VARCHAR(120) NOT NULL,
-  funcao         VARCHAR(60)  NOT NULL,
-  telefone       VARCHAR(20)  NULL,
-  CONSTRAINT pk_funcionario PRIMARY KEY (id_funcionario)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- CLIENTE  (cadastro opcional no negocio real; aqui mantemos o cadastro
--- completo para quem compra fiado/boleto, conforme levantamento)
--- ---------------------------------------------------------------------------
-CREATE TABLE cliente (
-  id_cliente         INT          NOT NULL AUTO_INCREMENT,
-  nome_razao_social  VARCHAR(150) NOT NULL,
-  cpf_cnpj           VARCHAR(18)  NULL,
-  telefone           VARCHAR(20)  NULL,
-  endereco           VARCHAR(200) NULL,
-  autorizado_prazo   BOOLEAN      NOT NULL DEFAULT FALSE,
-  CONSTRAINT pk_cliente PRIMARY KEY (id_cliente),
-  CONSTRAINT uq_cliente_cpf_cnpj UNIQUE (cpf_cnpj)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- PRODUTO
--- Observacao (suposicao assumida pelo grupo): o atributo estoque_atual foi
--- acrescentado no modelo logico (nao existia no DER conceitual) porque e
--- exatamente o que falta hoje no negocio real -- controle de saldo automatizado
--- (problema P1 do levantamento). Sem ele nao ha como responder "o que esta
--- abaixo do minimo" com uma consulta.
--- ---------------------------------------------------------------------------
-CREATE TABLE produto (
-  id_produto     INT            NOT NULL AUTO_INCREMENT,
-  nome           VARCHAR(120)   NOT NULL,
-  id_categoria   INT            NOT NULL,
-  unidade_venda  ENUM('kg','un','pct','cx') NOT NULL DEFAULT 'kg',
-  preco          DECIMAL(10,2)  NOT NULL,
-  estoque_minimo DECIMAL(10,2)  NOT NULL DEFAULT 0,
-  estoque_atual  DECIMAL(10,2)  NOT NULL DEFAULT 0,
-  CONSTRAINT pk_produto PRIMARY KEY (id_produto),
-  CONSTRAINT fk_produto_categoria FOREIGN KEY (id_categoria)
-      REFERENCES categoria_produto (id_categoria)
-      ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT ck_produto_preco CHECK (preco > 0),
-  CONSTRAINT ck_produto_estoque_minimo CHECK (estoque_minimo >= 0),
-  CONSTRAINT ck_produto_estoque_atual CHECK (estoque_atual >= 0),
-  KEY ix_produto_categoria (id_categoria)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- PEDIDO_COMPRA
--- ---------------------------------------------------------------------------
-CREATE TABLE pedido_compra (
-  id_pedido_compra INT  NOT NULL AUTO_INCREMENT,
-  id_fornecedor    INT  NOT NULL,
-  id_funcionario   INT  NOT NULL,
-  data_pedido      DATE NOT NULL,
-  prazo_entrega    DATE NULL,
-  status           ENUM('aberto','confirmado','recebido','cancelado')
-                   NOT NULL DEFAULT 'aberto',
-  CONSTRAINT pk_pedido_compra PRIMARY KEY (id_pedido_compra),
-  CONSTRAINT fk_pedido_fornecedor FOREIGN KEY (id_fornecedor)
-      REFERENCES fornecedor (id_fornecedor)
-      ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT fk_pedido_funcionario FOREIGN KEY (id_funcionario)
-      REFERENCES funcionario (id_funcionario)
-      ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT ck_pedido_datas CHECK (prazo_entrega IS NULL OR prazo_entrega >= data_pedido),
-  KEY ix_pedido_fornecedor (id_fornecedor)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- PEDIDO_COMPRA_PRODUTO
--- Tabela associativa que vem do relacionamento N:N "contem" entre Pedido de
--- Compra e Produto no DER conceitual (regra de conversao da apostila: N:N
--- vira tabela com as duas PKs dos lados como FK compondo a PK da nova tabela).
--- O atributo preco_unitario_compra foi acrescentado no logico (suposicao: nao
--- estava no DER conceitual, mas e necessario para calcular o custo do pedido).
--- ---------------------------------------------------------------------------
-CREATE TABLE pedido_compra_produto (
-  id_pedido_compra      INT           NOT NULL,
-  id_produto             INT           NOT NULL,
-  quantidade              DECIMAL(10,2) NOT NULL,
-  preco_unitario_compra   DECIMAL(10,2) NOT NULL,
-  CONSTRAINT pk_pedido_compra_produto PRIMARY KEY (id_pedido_compra, id_produto),
-  CONSTRAINT fk_pcp_pedido FOREIGN KEY (id_pedido_compra)
-      REFERENCES pedido_compra (id_pedido_compra)
-      ON UPDATE CASCADE ON DELETE CASCADE,
-  CONSTRAINT fk_pcp_produto FOREIGN KEY (id_produto)
-      REFERENCES produto (id_produto)
-      ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT ck_pcp_quantidade CHECK (quantidade > 0),
-  CONSTRAINT ck_pcp_preco CHECK (preco_unitario_compra > 0)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- VENDA
--- "Venda a Prazo" foi incorporada aqui (decisao tomada ja na Entrega 1):
--- forma_pagamento = 'fiado' ou 'boleto' + data_vencimento + status_pagamento
--- cobrem o que antes seria uma entidade separada.
--- ---------------------------------------------------------------------------
-CREATE TABLE venda (
-  id_venda         INT            NOT NULL AUTO_INCREMENT,
-  canal            ENUM('balcao','telefone','whatsapp','delivery') NOT NULL,
-  data_hora        DATETIME       NOT NULL,
-  id_cliente       INT            NULL,
-  id_funcionario   INT            NOT NULL,
-  forma_pagamento  ENUM('dinheiro','pix','cartao_credito','cartao_debito',
-                         'vale_alimentacao','boleto','fiado') NOT NULL,
-  valor_total      DECIMAL(10,2)  NOT NULL,
-  desconto         DECIMAL(10,2)  NOT NULL DEFAULT 0,
-  status           ENUM('concluida','cancelada') NOT NULL DEFAULT 'concluida',
-  data_vencimento  DATE           NULL,
-  status_pagamento ENUM('pago','em_aberto','atrasado') NULL,
-  CONSTRAINT pk_venda PRIMARY KEY (id_venda),
-  -- RESTRICT em UPDATE e DELETE (nao CASCADE/SET NULL): o MySQL 8 nao permite
-  -- nenhuma acao automatica (CASCADE ou SET NULL, em UPDATE ou DELETE) numa
-  -- coluna que tambem apareca num CHECK (erro 3823). id_cliente e PK surrogate
-  -- (AUTO_INCREMENT) em cliente, entao nunca e atualizado manualmente -- RESTRICT
-  -- no UPDATE nao tem efeito pratico. No DELETE, o unico DELETE de cliente do
-  -- script (secao 6.2) so remove quem nunca comprou, entao RESTRICT nao atrapalha
-  -- e ainda protege o historico de vendas.
-  CONSTRAINT fk_venda_cliente FOREIGN KEY (id_cliente)
-      REFERENCES cliente (id_cliente)
-      ON UPDATE RESTRICT ON DELETE RESTRICT,
-  CONSTRAINT fk_venda_funcionario FOREIGN KEY (id_funcionario)
-      REFERENCES funcionario (id_funcionario)
-      ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT ck_venda_total CHECK (valor_total >= 0),
-  CONSTRAINT ck_venda_desconto CHECK (desconto >= 0),
-  CONSTRAINT ck_venda_fiado_boleto_cliente CHECK (
-      forma_pagamento NOT IN ('fiado','boleto') OR id_cliente IS NOT NULL
-  ),
-  CONSTRAINT ck_venda_fiado_boleto_vencimento CHECK (
-      forma_pagamento NOT IN ('fiado','boleto') OR data_vencimento IS NOT NULL
-  ),
-  KEY ix_venda_data_hora (data_hora),
-  KEY ix_venda_cliente (id_cliente),
-  KEY ix_venda_forma_pag (forma_pagamento)
-) ENGINE = InnoDB;
-
--- ---------------------------------------------------------------------------
--- VENDA_PRODUTO
--- Tabela associativa do relacionamento N:N "compoe" entre Venda e Produto.
--- ---------------------------------------------------------------------------
-CREATE TABLE venda_produto (
-  id_venda        INT            NOT NULL,
-  id_produto      INT            NOT NULL,
-  peso_quantidade DECIMAL(10,3)  NOT NULL,
-  preco_unitario  DECIMAL(10,2)  NOT NULL,
-  CONSTRAINT pk_venda_produto PRIMARY KEY (id_venda, id_produto),
-  CONSTRAINT fk_vp_venda FOREIGN KEY (id_venda)
-      REFERENCES venda (id_venda)
-      ON UPDATE CASCADE ON DELETE CASCADE,
-  CONSTRAINT fk_vp_produto FOREIGN KEY (id_produto)
-      REFERENCES produto (id_produto)
-      ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT ck_vp_peso CHECK (peso_quantidade > 0),
-  CONSTRAINT ck_vp_preco CHECK (preco_unitario > 0)
-) ENGINE = InnoDB;
-
--- Observacao: os indices auxiliares (data_hora, id_cliente, forma_pagamento em
--- venda; id_fornecedor em pedido_compra; id_categoria em produto) foram
--- declarados como KEY dentro de cada CREATE TABLE acima, em vez de com
--- CREATE INDEX separado -- CREATE INDEX exige o privilegio INDEX a parte, que
--- usuarios restritos (ex.: sandbox do myCompiler.io) costumam nao ter. Como
--- KEY faz parte da propria definicao da tabela, basta o privilegio CREATE.
-
-
--- =====================================================================================
--- 3) INSERT INTO  (carga da massa de dados)
--- =====================================================================================
--- Fornecedor
-INSERT INTO fornecedor (nome_razao_social, telefone_whatsapp, tipo_produto_fornecido) VALUES
-  ('Frigorifico Boi Forte Ltda', '11988001122', 'Carnes bovinas em pecas'),
-  ('Granja Penas Douradas Ltda', '11988002233', 'Aves e derivados'),
-  ('Suinos do Vale Agropecuaria', '11988003344', 'Carnes suinas'),
-  ('Distribuidora Sabor e Cia', '11988004455', 'Mercearia, massas e bebidas'),
-  ('Congelados Polar Distribuicao', '11988005566', 'Produtos congelados'),
-  ('Bebidas Fonte Clara Ltda', '11988006677', 'Bebidas em geral');
-
--- Categoria de Produto
-INSERT INTO categoria_produto (descricao, regra_armazenamento) VALUES
-  ('Carne Bovina', 'Camara fria 0 a 4 C, uso em ate 3 dias apos abertura'),
-  ('Carne Suina', 'Camara fria 0 a 4 C, uso em ate 3 dias apos abertura'),
-  ('Aves', 'Camara fria 0 a 4 C, uso em ate 2 dias apos abertura'),
-  ('Congelados', 'Freezer -18 C, nao recongelar apos descongelo'),
-  ('Mercearia', 'Ambiente seco e arejado'),
-  ('Massas', 'Ambiente seco, ao abrigo de umidade'),
-  ('Bebidas', 'Ambiente ou refrigerado conforme o item'),
-  ('Rotisseria e Churrasco', 'Refrigerado, consumo em ate 24h apos preparo');
 
 -- Funcionario
-INSERT INTO funcionario (nome, funcao, telefone) VALUES
-  ('Carolina Mendes Rotineira', 'Proprietaria', '11977001001'),
-  ('Jose Carlos Pereira', 'Acougueiro', '11977001002'),
-  ('Antonio Ferreira Lima', 'Acougueiro', '11977001003'),
-  ('Marcos Vinicius Souza', 'Acougueiro', '11977001004'),
-  ('Paulo Roberto Alves', 'Acougueiro', '11977001005'),
-  ('Edilson Rodrigues Dias', 'Acougueiro', '11977001006'),
-  ('Fernanda Oliveira Santos', 'Balconista', '11977001007'),
-  ('Juliana Costa Ramos', 'Balconista', '11977001008'),
-  ('Ricardo Nunes Barbosa', 'Operador de Caixa', '11977001009'),
-  ('Patricia Gomes Teixeira', 'Operador de Caixa', '11977001010'),
-  ('Luiz Henrique Martins', 'Ajudante Geral', '11977001011'),
-  ('Diego Almeida Rocha', 'Entregador', '11977001012'),
-  ('Sandra Regina Fonseca', 'Responsavel Administrativo-Financeiro', '11977001013');
+INSERT INTO FUNCIONARIO (NM_FUNCIONARIO, TP_FUNCAO, NR_TELEFONE, IN_ATIVO) VALUES
+  ('Carolina Mendes Rotineira', 'PROPRIETARIO', '11977001001', 1),
+  ('Jose Carlos Pereira', 'ACOUGUEIRO', '11977001002', 1),
+  ('Antonio Ferreira Lima', 'ACOUGUEIRO', '11977001003', 1),
+  ('Marcos Vinicius Souza', 'ACOUGUEIRO', '11977001004', 1),
+  ('Paulo Roberto Alves', 'ACOUGUEIRO', '11977001005', 1),
+  ('Edilson Rodrigues Dias', 'ACOUGUEIRO', '11977001006', 1),
+  ('Fernanda Oliveira Santos', 'BALCONISTA', '11977001007', 1),
+  ('Juliana Costa Ramos', 'BALCONISTA', '11977001008', 1),
+  ('Ricardo Nunes Barbosa', 'CAIXA', '11977001009', 1),
+  ('Patricia Gomes Teixeira', 'CAIXA', '11977001010', 1),
+  ('Luiz Henrique Martins', 'AJUDANTE_GERAL', '11977001011', 1),
+  ('Diego Almeida Rocha', 'ENTREGADOR', '11977001012', 1),
+  ('Sandra Regina Fonseca', 'ADMIN_FINANCEIRO', '11977001013', 1);
 
--- Cliente
-INSERT INTO cliente (nome_razao_social, cpf_cnpj, telefone, endereco, autorizado_prazo) VALUES
-  ('Mariana Souza Lima', '11122233344', '11966001001', 'Rua das Acacias 120', 1),
-  ('Joao Pedro Castro', '22233344455', '11966001002', 'Rua das Palmeiras 45', 0),
-  ('Restaurante Sabor Caseiro Ltda', '11222333000155', '11966001003', 'Av. Central 900', 1),
-  ('Beatriz Andrade Reis', '33344455566', '11966001004', 'Rua Dois de Maio 88', 0),
-  ('Padaria Pao Dourado Ltda', '22333444000166', '11966001005', 'Rua das Flores 230', 1),
-  ('Lucas Gabriel Moreira', '44455566677', '11966001006', 'Rua Bela Vista 15', 0),
-  ('Camila Fernandes Pires', '55566677788', '11966001007', 'Rua Sao Jose 310', 0),
-  ('Hotel Pousada Boa Estadia Ltda', '33444555000177', '11966001008', 'Av. das Nacoes 500', 1),
-  ('Rafael Augusto Nogueira', '66677788899', '11966001009', 'Rua Vinte de Abril 77', 0),
-  ('Vanessa Cristina Barros', '77788899900', '11966001010', 'Rua das Hortensias 64', 0),
-  ('Gustavo Henrique Lacerda', '88899900011', '11966001011', 'Rua do Comercio 12', 0),
-  ('Ana Paula Siqueira', '99900011122', '11966001012', 'Rua Jardim Alegre 33', 0),
-  ('Felipe Tavares Monteiro', '10011122233', '11966001013', 'Rua Industrial 190', 0),
-  ('Larissa Pinheiro Costa', '12121212121', '11966001014', 'Rua das Oliveiras 58', 0),
-  ('Eduardo Martins Vieira', '13131313131', '11966001015', 'Rua Santo Antonio 402', 0),
-  ('Churrascaria Fogo Brasa Ltda', '44555666000188', '11966001016', 'Av. Brasil 1500', 1),
-  ('Isabela Cardoso Farias', '14141414141', '11966001017', 'Rua Nove de Julho 21', 0),
-  ('Thiago Ribeiro Correa', '15151515151', '11966001018', 'Rua Marechal Deodoro 155', 0),
-  ('Renata Alves Pacheco', '16161616161', '11966001019', 'Rua Ipe Amarelo 40', 0),
-  ('Marcelo Souza Prado', '17171717171', '11966001020', 'Rua Cedro Rosa 81', 0);
+-- Fornecedor (CNPJ nao constava na carga anterior: fica NULL, coluna aceita nulo)
+INSERT INTO FORNECEDOR (NM_FORNECEDOR, NR_CNPJ, NR_TELEFONE, IN_HABITUAL) VALUES
+  ('Frigorifico Boi Forte Ltda', NULL, '11988001122', 1),
+  ('Granja Penas Douradas Ltda', NULL, '11988002233', 1),
+  ('Suinos do Vale Agropecuaria', NULL, '11988003344', 1),
+  ('Distribuidora Sabor e Cia', NULL, '11988004455', 1),
+  ('Congelados Polar Distribuicao', NULL, '11988005566', 1),
+  ('Bebidas Fonte Clara Ltda', NULL, '11988006677', 1);
 
--- Produto
-INSERT INTO produto (nome, id_categoria, unidade_venda, preco, estoque_minimo, estoque_atual) VALUES
-  ('Picanha bovina', 1, 'kg', 69.90, 15.00, 8.00),
-  ('Alcatra bovina', 1, 'kg', 42.90, 20.00, 35.00),
-  ('Costela bovina', 1, 'kg', 32.50, 18.00, 22.00),
-  ('Fraldinha bovina', 1, 'kg', 39.90, 12.00, 4.50),
-  ('File mignon bovino', 1, 'kg', 79.90, 10.00, 11.00),
-  ('Patinho bovino moido', 1, 'kg', 36.90, 25.00, 30.00),
-  ('Pernil suino', 2, 'kg', 24.90, 15.00, 17.00),
-  ('Lombo suino', 2, 'kg', 28.90, 12.00, 13.50),
-  ('Costelinha suina', 2, 'kg', 26.90, 10.00, 6.00),
-  ('Linguica toscana', 2, 'kg', 22.90, 20.00, 24.00),
-  ('Bacon fatiado', 2, 'kg', 34.90, 8.00, 9.00),
-  ('Frango inteiro', 3, 'kg', 13.90, 30.00, 28.00),
-  ('Coxa e sobrecoxa de frango', 3, 'kg', 15.90, 25.00, 31.00),
-  ('Peito de frango', 3, 'kg', 18.90, 25.00, 20.00),
-  ('Asa de frango', 3, 'kg', 14.90, 15.00, 16.00),
-  ('Hamburguer congelado 1kg', 4, 'pct', 24.90, 10.00, 12.00),
-  ('Nuggets congelados 1kg', 4, 'pct', 22.90, 10.00, 7.00),
-  ('Batata congelada 1kg', 4, 'pct', 14.90, 15.00, 18.00),
-  ('Arroz tipo 1 5kg', 5, 'un', 28.90, 10.00, 14.00),
-  ('Feijao carioca 1kg', 5, 'un', 8.90, 20.00, 25.00),
-  ('Sal refinado 1kg', 5, 'un', 3.50, 15.00, 18.00),
-  ('Oleo de soja 900ml', 5, 'un', 7.90, 20.00, 19.00),
-  ('Macarrao espaguete 500g', 6, 'un', 5.90, 20.00, 22.00),
-  ('Molho de tomate 340g', 6, 'un', 4.50, 20.00, 23.00),
-  ('Refrigerante cola 2L', 7, 'un', 9.90, 24.00, 30.00),
-  ('Agua mineral 500ml', 7, 'un', 2.50, 48.00, 40.00),
-  ('Cerveja pilsen lata 350ml', 7, 'un', 4.90, 48.00, 55.00),
-  ('Suco de laranja 1L', 7, 'un', 8.90, 15.00, 17.00),
-  ('Frango assado rotisseria', 8, 'kg', 24.90, 5.00, 3.00),
-  ('Espetinho misto', 8, 'un', 7.90, 20.00, 26.00);
+-- Categoria
+INSERT INTO CATEGORIA (NM_CATEGORIA, DS_REGRA_ARMAZENAMENTO, IN_PERECIVEL, IN_EXIGE_INSPECAO) VALUES
+  ('Carne Bovina', 'Camara fria 0 a 4 C, uso em ate 3 dias apos abertura', 1, 1),
+  ('Carne Suina', 'Camara fria 0 a 4 C, uso em ate 3 dias apos abertura', 1, 1),
+  ('Aves', 'Camara fria 0 a 4 C, uso em ate 2 dias apos abertura', 1, 1),
+  ('Congelados', 'Freezer -18 C, nao recongelar apos descongelo', 1, 0),
+  ('Mercearia', 'Ambiente seco e arejado', 0, 0),
+  ('Massas', 'Ambiente seco, ao abrigo de umidade', 0, 0),
+  ('Bebidas', 'Ambiente ou refrigerado conforme o item', 0, 0),
+  ('Rotisseria e Churrasco', 'Refrigerado, consumo em ate 24h apos preparo', 1, 0);
 
--- Pedido de Compra
-INSERT INTO pedido_compra (id_fornecedor, id_funcionario, data_pedido, prazo_entrega, status) VALUES
-  (1, 1, '2026-10-01', '2026-10-04', 'recebido'),
-  (2, 1, '2026-10-03', '2026-10-04', 'recebido'),
-  (3, 1, '2026-10-06', '2026-10-07', 'recebido'),
-  (4, 1, '2026-10-08', '2026-10-11', 'recebido'),
-  (5, 1, '2026-10-10', '2026-10-12', 'recebido'),
-  (6, 1, '2026-10-13', '2026-10-14', 'recebido'),
-  (1, 1, '2026-10-15', '2026-10-16', 'recebido'),
-  (2, 1, '2026-10-18', '2026-10-19', 'confirmado'),
-  (3, 1, '2026-10-20', NULL, 'cancelado'),
-  (4, 1, '2026-10-22', '2026-10-25', 'aberto');
+-- Cliente (bairro e CEP sao ficticios: o endereco antigo era um campo unico, sem esses dados)
+INSERT INTO CLIENTE (NM_CLIENTE, TP_PESSOA, NR_DOCUMENTO, NR_TELEFONE, DS_LOGRADOURO, NR_ENDERECO, NM_BAIRRO, NR_CEP, IN_AUTORIZADO_PRAZO) VALUES
+  ('Mariana Souza Lima', 'F', '11122233344', '11966001001', 'Rua das Acacias', '120', 'Jardim Alegre', '13001237', 1),
+  ('Joao Pedro Castro', 'F', '22233344455', '11966001002', 'Rua das Palmeiras', '45', 'Vila Nova', '13002474', 0),
+  ('Restaurante Sabor Caseiro Ltda', 'J', '11222333000155', '11966001003', 'Av. Central', '900', 'Bela Vista', '13003711', 1),
+  ('Beatriz Andrade Reis', 'F', '33344455566', '11966001004', 'Rua Dois de Maio', '88', 'Santo Antonio', '13004948', 0),
+  ('Padaria Pao Dourado Ltda', 'J', '22333444000166', '11966001005', 'Rua das Flores', '230', 'Industrial', '13006185', 1),
+  ('Lucas Gabriel Moreira', 'F', '44455566677', '11966001006', 'Rua Bela Vista', '15', 'Parque das Flores', '13007422', 0),
+  ('Camila Fernandes Pires', 'F', '55566677788', '11966001007', 'Rua Sao Jose', '310', 'Centro', '13008659', 0),
+  ('Hotel Pousada Boa Estadia Ltda', 'J', '33444555000177', '11966001008', 'Av. das Nacoes', '500', 'Jardim Alegre', '13009896', 1),
+  ('Rafael Augusto Nogueira', 'F', '66677788899', '11966001009', 'Rua Vinte de Abril', '77', 'Vila Nova', '13011133', 0),
+  ('Vanessa Cristina Barros', 'F', '77788899900', '11966001010', 'Rua das Hortensias', '64', 'Bela Vista', '13012370', 0),
+  ('Gustavo Henrique Lacerda', 'F', '88899900011', '11966001011', 'Rua do Comercio', '12', 'Santo Antonio', '13013607', 0),
+  ('Ana Paula Siqueira', 'F', '99900011122', '11966001012', 'Rua Jardim Alegre', '33', 'Industrial', '13014844', 0),
+  ('Felipe Tavares Monteiro', 'F', '10011122233', '11966001013', 'Rua Industrial', '190', 'Parque das Flores', '13016081', 0),
+  ('Larissa Pinheiro Costa', 'F', '12121212121', '11966001014', 'Rua das Oliveiras', '58', 'Centro', '13017318', 0),
+  ('Eduardo Martins Vieira', 'F', '13131313131', '11966001015', 'Rua Santo Antonio', '402', 'Jardim Alegre', '13018555', 0),
+  ('Churrascaria Fogo Brasa Ltda', 'J', '44555666000188', '11966001016', 'Av. Brasil', '1500', 'Vila Nova', '13019792', 1),
+  ('Isabela Cardoso Farias', 'F', '14141414141', '11966001017', 'Rua Nove de Julho', '21', 'Bela Vista', '13021029', 0),
+  ('Thiago Ribeiro Correa', 'F', '15151515151', '11966001018', 'Rua Marechal Deodoro', '155', 'Santo Antonio', '13022266', 0),
+  ('Renata Alves Pacheco', 'F', '16161616161', '11966001019', 'Rua Ipe Amarelo', '40', 'Industrial', '13023503', 0),
+  ('Marcelo Souza Prado', 'F', '17171717171', '11966001020', 'Rua Cedro Rosa', '81', 'Parque das Flores', '13024740', 0);
 
--- Item do Pedido de Compra (relacionamento N:N Pedido de Compra x Produto)
-INSERT INTO pedido_compra_produto (id_pedido_compra, id_produto, quantidade, preco_unitario_compra) VALUES
+-- Produto (o saldo deixou de ser coluna: vem de MOVIMENTACAO_ESTOQUE, ver abaixo)
+INSERT INTO PRODUTO (NM_PRODUTO, ID_CATEGORIA, TP_UNIDADE_VENDA, VL_PRECO_VENDA, QT_ESTOQUE_MINIMO, IN_VENDAVEL, IN_ATIVO) VALUES
+  ('Picanha bovina', 1, 'KG', 69.90, 15.00, 1, 1),
+  ('Alcatra bovina', 1, 'KG', 42.90, 20.00, 1, 1),
+  ('Costela bovina', 1, 'KG', 32.50, 18.00, 1, 1),
+  ('Fraldinha bovina', 1, 'KG', 39.90, 12.00, 1, 1),
+  ('File mignon bovino', 1, 'KG', 79.90, 10.00, 1, 1),
+  ('Patinho bovino moido', 1, 'KG', 36.90, 25.00, 1, 1),
+  ('Pernil suino', 2, 'KG', 24.90, 15.00, 1, 1),
+  ('Lombo suino', 2, 'KG', 28.90, 12.00, 1, 1),
+  ('Costelinha suina', 2, 'KG', 26.90, 10.00, 1, 1),
+  ('Linguica toscana', 2, 'KG', 22.90, 20.00, 1, 1),
+  ('Bacon fatiado', 2, 'KG', 34.90, 8.00, 1, 1),
+  ('Frango inteiro', 3, 'KG', 13.90, 30.00, 1, 1),
+  ('Coxa e sobrecoxa de frango', 3, 'KG', 15.90, 25.00, 1, 1),
+  ('Peito de frango', 3, 'KG', 18.90, 25.00, 1, 1),
+  ('Asa de frango', 3, 'KG', 14.90, 15.00, 1, 1),
+  ('Hamburguer congelado 1kg', 4, 'UN', 24.90, 10.00, 1, 1),
+  ('Nuggets congelados 1kg', 4, 'UN', 22.90, 10.00, 1, 1),
+  ('Batata congelada 1kg', 4, 'UN', 14.90, 15.00, 1, 1),
+  ('Arroz tipo 1 5kg', 5, 'UN', 28.90, 10.00, 1, 1),
+  ('Feijao carioca 1kg', 5, 'UN', 8.90, 20.00, 1, 1),
+  ('Sal refinado 1kg', 5, 'UN', 3.50, 15.00, 1, 1),
+  ('Oleo de soja 900ml', 5, 'UN', 7.90, 20.00, 1, 1),
+  ('Macarrao espaguete 500g', 6, 'UN', 5.90, 20.00, 1, 1),
+  ('Molho de tomate 340g', 6, 'UN', 4.50, 20.00, 1, 1),
+  ('Refrigerante cola 2L', 7, 'UN', 9.90, 24.00, 1, 1),
+  ('Agua mineral 500ml', 7, 'UN', 2.50, 48.00, 1, 1),
+  ('Cerveja pilsen lata 350ml', 7, 'UN', 4.90, 48.00, 1, 1),
+  ('Suco de laranja 1L', 7, 'UN', 8.90, 15.00, 1, 1),
+  ('Frango assado rotisseria', 8, 'KG', 24.90, 5.00, 1, 1),
+  ('Espetinho misto', 8, 'UN', 7.90, 20.00, 1, 1);
+
+-- Pedido de Compra (recebidos ganham DT_RECEBIMENTO = data prevista e nota fiscal ficticia)
+INSERT INTO PEDIDO_COMPRA (ID_FORNECEDOR, ID_FUNCIONARIO, DT_PEDIDO, DT_PREVISTA_ENTREGA, DT_RECEBIMENTO, NR_NOTA_FISCAL, ST_PEDIDO, DS_DIVERGENCIA) VALUES
+  (1, 1, '2026-10-01', '2026-10-04', '2026-10-04', 'NF-1001', 'RECEBIDO', NULL),
+  (2, 1, '2026-10-03', '2026-10-04', '2026-10-04', 'NF-1002', 'RECEBIDO', NULL),
+  (3, 1, '2026-10-06', '2026-10-07', '2026-10-07', 'NF-1003', 'RECEBIDO', NULL),
+  (4, 1, '2026-10-08', '2026-10-11', '2026-10-11', 'NF-1004', 'RECEBIDO', NULL),
+  (5, 1, '2026-10-10', '2026-10-12', '2026-10-12', 'NF-1005', 'RECEBIDO', NULL),
+  (6, 1, '2026-10-13', '2026-10-14', '2026-10-14', 'NF-1006', 'RECEBIDO', NULL),
+  (1, 1, '2026-10-15', '2026-10-16', '2026-10-16', 'NF-1007', 'RECEBIDO', NULL),
+  (2, 1, '2026-10-18', '2026-10-19', NULL, NULL, 'PENDENTE', NULL),
+  (3, 1, '2026-10-20', '2026-10-21', NULL, NULL, 'CANCELADO', NULL),
+  (4, 1, '2026-10-22', '2026-10-25', NULL, NULL, 'PENDENTE', NULL);
+
+-- Item do Pedido de Compra (entidade associativa 'contem')
+INSERT INTO ITEM_PEDIDO_COMPRA (ID_PEDIDO_COMPRA, ID_PRODUTO, QT_PEDIDA, VL_UNITARIO_COMPRA) VALUES
   (1, 22, 8.04, 5.54),
   (1, 24, 6.04, 2.8),
   (2, 8, 24.64, 18.85),
@@ -360,101 +404,173 @@ INSERT INTO pedido_compra_produto (id_pedido_compra, id_produto, quantidade, pre
   (10, 11, 13.63, 20.77),
   (10, 7, 14.2, 16.07);
 
--- Venda
-INSERT INTO venda (canal, data_hora, id_cliente, id_funcionario, forma_pagamento, valor_total, desconto, status, data_vencimento, status_pagamento) VALUES
-  ('whatsapp', '2026-10-01 16:45:00', NULL, 3, 'pix', 9.90, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-02 09:15:00', NULL, 3, 'cartao_debito', 148.69, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-03 19:30:00', 14, 2, 'pix', 222.19, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-04 17:15:00', NULL, 2, 'vale_alimentacao', 26.70, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-05 08:30:00', 3, 10, 'dinheiro', 165.98, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-06 15:45:00', 7, 5, 'boleto', 75.73, 0.00, 'concluida', '2026-10-21', 'em_aberto'),
-  ('balcao', '2026-10-07 16:15:00', NULL, 8, 'dinheiro', 25.45, 1.25, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-08 17:45:00', 16, 5, 'pix', 90.01, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-09 18:00:00', 11, 8, 'dinheiro', 51.24, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-10 10:00:00', 18, 5, 'dinheiro', 76.02, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-11 07:15:00', NULL, 7, 'cartao_credito', 155.86, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-12 11:15:00', NULL, 6, 'dinheiro', 80.52, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-13 15:15:00', 6, 5, 'dinheiro', 118.52, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-14 07:00:00', NULL, 6, 'cartao_credito', 35.50, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-15 09:30:00', NULL, 2, 'dinheiro', 56.94, 0.00, 'cancelada', NULL, NULL),
-  ('balcao', '2026-10-16 09:30:00', NULL, 10, 'pix', 68.00, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-17 11:00:00', 4, 11, 'boleto', 122.73, 0.00, 'concluida', '2026-11-01', 'atrasado'),
-  ('balcao', '2026-10-18 11:00:00', NULL, 3, 'dinheiro', 68.90, 0.00, 'cancelada', NULL, NULL),
-  ('balcao', '2026-10-19 13:00:00', 5, 8, 'boleto', 178.40, 0.00, 'concluida', '2026-11-03', 'em_aberto'),
-  ('delivery', '2026-10-20 12:15:00', NULL, 10, 'cartao_credito', 277.19, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-21 07:15:00', NULL, 2, 'cartao_debito', 87.10, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-22 14:15:00', 8, 4, 'fiado', 145.57, 0.00, 'concluida', '2026-11-21', 'pago'),
-  ('balcao', '2026-10-23 07:00:00', NULL, 9, 'cartao_credito', 92.31, 0.00, 'cancelada', NULL, NULL),
-  ('delivery', '2026-10-24 11:00:00', 18, 3, 'boleto', 46.35, 0.00, 'concluida', '2026-11-08', 'pago'),
-  ('delivery', '2026-10-01 17:00:00', 14, 11, 'boleto', 259.96, 0.00, 'concluida', '2026-10-16', 'em_aberto'),
-  ('telefone', '2026-10-02 16:30:00', NULL, 5, 'cartao_credito', 172.70, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-03 15:45:00', NULL, 9, 'cartao_credito', 64.86, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-04 09:00:00', NULL, 10, 'vale_alimentacao', 21.14, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-05 10:45:00', 1, 3, 'dinheiro', 221.43, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-06 15:30:00', NULL, 6, 'vale_alimentacao', 138.69, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-07 19:45:00', 3, 10, 'fiado', 89.94, 0.00, 'concluida', '2026-11-06', 'em_aberto'),
-  ('telefone', '2026-10-08 08:45:00', NULL, 2, 'cartao_debito', 219.27, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-09 12:30:00', 18, 3, 'boleto', 111.11, 6.28, 'concluida', '2026-10-24', 'atrasado'),
-  ('telefone', '2026-10-10 18:15:00', NULL, 9, 'vale_alimentacao', 284.77, 17.06, 'cancelada', NULL, NULL),
-  ('balcao', '2026-10-11 10:45:00', NULL, 2, 'cartao_debito', 123.00, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-12 08:00:00', 1, 10, 'fiado', 57.80, 0.00, 'concluida', '2026-11-11', 'pago'),
-  ('balcao', '2026-10-13 19:30:00', 4, 6, 'boleto', 154.68, 0.00, 'concluida', '2026-10-28', 'atrasado'),
-  ('balcao', '2026-10-14 13:15:00', 8, 6, 'boleto', 57.30, 0.00, 'concluida', '2026-10-29', 'atrasado'),
-  ('balcao', '2026-10-15 17:30:00', NULL, 5, 'dinheiro', 154.04, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-16 17:30:00', NULL, 5, 'cartao_debito', 128.08, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-17 19:45:00', 2, 6, 'fiado', 151.47, 0.00, 'concluida', '2026-11-16', 'pago'),
-  ('whatsapp', '2026-10-18 15:00:00', 14, 10, 'cartao_debito', 184.80, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-19 19:00:00', 8, 11, 'cartao_credito', 109.15, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-20 11:15:00', 18, 10, 'boleto', 162.90, 0.00, 'concluida', '2026-11-04', 'pago'),
-  ('balcao', '2026-10-21 08:15:00', NULL, 10, 'cartao_credito', 155.81, 0.00, 'cancelada', NULL, NULL),
-  ('balcao', '2026-10-22 09:45:00', NULL, 7, 'cartao_debito', 240.83, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-23 08:00:00', NULL, 9, 'cartao_credito', 168.82, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-24 16:15:00', NULL, 3, 'cartao_debito', 349.47, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-01 10:30:00', 6, 8, 'vale_alimentacao', 28.65, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-02 11:00:00', 15, 11, 'boleto', 98.29, 0.00, 'concluida', '2026-10-17', 'em_aberto'),
-  ('whatsapp', '2026-10-03 13:00:00', NULL, 10, 'cartao_credito', 32.09, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-04 18:30:00', NULL, 8, 'cartao_credito', 217.08, 13.92, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-05 12:30:00', 1, 8, 'boleto', 241.00, 0.00, 'concluida', '2026-10-20', 'em_aberto'),
-  ('delivery', '2026-10-06 16:45:00', NULL, 4, 'cartao_debito', 171.30, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-07 17:45:00', NULL, 7, 'cartao_credito', 39.60, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-08 07:45:00', 12, 7, 'vale_alimentacao', 191.44, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-09 07:15:00', 1, 9, 'vale_alimentacao', 42.57, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-10 09:45:00', NULL, 11, 'cartao_credito', 204.47, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-11 09:00:00', 17, 3, 'cartao_credito', 94.63, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-12 09:45:00', 18, 4, 'vale_alimentacao', 75.52, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-13 13:00:00', NULL, 4, 'cartao_debito', 120.84, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-14 08:45:00', NULL, 5, 'dinheiro', 213.62, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-15 12:45:00', NULL, 4, 'dinheiro', 26.30, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-16 13:00:00', 10, 8, 'boleto', 85.51, 0.00, 'concluida', '2026-10-31', 'pago'),
-  ('balcao', '2026-10-17 13:15:00', 6, 5, 'boleto', 35.60, 0.00, 'concluida', '2026-11-01', 'em_aberto'),
-  ('balcao', '2026-10-18 14:15:00', NULL, 4, 'cartao_debito', 61.58, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-19 17:15:00', NULL, 4, 'vale_alimentacao', 90.36, 5.43, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-20 12:30:00', 13, 11, 'cartao_credito', 39.50, 0.00, 'cancelada', NULL, NULL),
-  ('whatsapp', '2026-10-21 11:15:00', 7, 2, 'vale_alimentacao', 102.60, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-22 14:00:00', NULL, 2, 'dinheiro', 86.21, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-23 15:30:00', NULL, 11, 'cartao_debito', 141.31, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-24 10:45:00', 13, 2, 'dinheiro', 19.30, 0.00, 'concluida', NULL, NULL),
-  ('delivery', '2026-10-01 11:45:00', 8, 2, 'fiado', 114.56, 0.00, 'concluida', '2026-10-31', 'pago'),
-  ('balcao', '2026-10-02 17:45:00', 2, 9, 'cartao_credito', 37.27, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-03 13:45:00', 5, 5, 'boleto', 19.60, 0.00, 'concluida', '2026-10-18', 'pago'),
-  ('balcao', '2026-10-04 07:30:00', NULL, 4, 'pix', 23.70, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-05 17:30:00', 4, 3, 'cartao_debito', 12.40, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-06 10:15:00', 18, 10, 'pix', 67.21, 6.65, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-07 09:15:00', NULL, 11, 'dinheiro', 27.17, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-08 10:30:00', 5, 9, 'boleto', 99.60, 0.00, 'concluida', '2026-10-23', 'em_aberto'),
-  ('whatsapp', '2026-10-09 14:15:00', 17, 7, 'boleto', 128.53, 0.00, 'concluida', '2026-10-24', 'atrasado'),
-  ('telefone', '2026-10-10 17:00:00', 3, 4, 'cartao_credito', 152.20, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-11 16:30:00', NULL, 5, 'dinheiro', 53.40, 0.00, 'concluida', NULL, NULL),
-  ('telefone', '2026-10-12 19:15:00', NULL, 4, 'cartao_debito', 105.62, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-13 14:00:00', 4, 8, 'boleto', 198.18, 0.00, 'concluida', '2026-10-28', 'em_aberto'),
-  ('delivery', '2026-10-14 13:30:00', 2, 3, 'boleto', 167.46, 0.00, 'concluida', '2026-10-29', 'em_aberto'),
-  ('balcao', '2026-10-15 12:30:00', NULL, 11, 'cartao_debito', 53.40, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-16 11:00:00', NULL, 11, 'cartao_credito', 133.49, 0.00, 'concluida', NULL, NULL),
-  ('balcao', '2026-10-17 17:00:00', 14, 5, 'cartao_debito', 144.05, 0.00, 'concluida', NULL, NULL),
-  ('whatsapp', '2026-10-18 09:15:00', NULL, 7, 'cartao_credito', 138.81, 0.00, 'concluida', NULL, NULL);
+-- Lote: um por item de pedido ja recebido (origina)
+INSERT INTO LOTE (ID_PEDIDO_COMPRA, ID_PRODUTO, NR_LOTE, DT_VALIDADE, NR_REGISTRO_INSPECAO) VALUES
+  (1, 22, 'L01-22', '2027-10-04', NULL),
+  (1, 24, 'L01-24', '2027-07-01', NULL),
+  (2, 8, 'L02-08', '2026-10-09', 'SIF-2022'),
+  (2, 17, 'L02-17', '2027-02-01', NULL),
+  (3, 8, 'L03-08', '2026-10-12', 'SIF-2033'),
+  (3, 15, 'L03-15', '2026-10-11', 'SIF-2033'),
+  (3, 19, 'L03-19', '2027-10-07', NULL),
+  (4, 25, 'L04-25', '2027-04-09', NULL),
+  (4, 11, 'L04-11', '2026-10-16', 'SIF-2044'),
+  (5, 26, 'L05-26', '2027-04-10', NULL),
+  (5, 2, 'L05-02', '2026-10-17', 'SIF-2055'),
+  (5, 24, 'L05-24', '2027-07-09', NULL),
+  (6, 19, 'L06-19', '2027-10-14', NULL),
+  (6, 7, 'L06-07', '2026-10-19', 'SIF-2066'),
+  (6, 23, 'L06-23', '2027-07-11', NULL),
+  (7, 9, 'L07-09', '2026-10-21', 'SIF-2011'),
+  (7, 15, 'L07-15', '2026-10-20', 'SIF-2011'),
+  (7, 21, 'L07-21', '2027-10-16', NULL);
 
--- Item de Venda (relacionamento N:N Venda x Produto)
-INSERT INTO venda_produto (id_venda, id_produto, peso_quantidade, preco_unitario) VALUES
+-- Movimentacao de estoque: AJUSTE de abertura (leva o saldo ao valor do antigo estoque_atual) + COMPRA de cada lote recebido
+INSERT INTO MOVIMENTACAO_ESTOQUE (ID_PRODUTO, ID_LOTE, ID_FUNCIONARIO, DT_HORA_MOVIMENTACAO, TP_SENTIDO, TP_MOTIVO, QT_MOVIMENTADA, DS_OBSERVACAO) VALUES
+  (1, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 8.687, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (2, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 45.093, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (3, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 28.127, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (4, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 22.100, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (5, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 19.581, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (6, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 43.783, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (7, NULL, 1, '2026-09-30 07:00:00', 'S', 'AJUSTE', 14.859, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (8, NULL, 1, '2026-09-30 07:00:00', 'S', 'AJUSTE', 40.028, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (9, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 11.064, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (10, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 37.297, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (11, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 5.077, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (12, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 31.499, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (13, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 37.840, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (14, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 31.429, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (15, NULL, 1, '2026-09-30 07:00:00', 'S', 'AJUSTE', 8.667, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (16, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 55.00, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (17, NULL, 1, '2026-09-30 07:00:00', 'S', 'AJUSTE', 8.55, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (18, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 53.00, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (19, NULL, 1, '2026-09-30 07:00:00', 'S', 'AJUSTE', 1.87, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (20, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 62.00, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (21, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 24.08, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (22, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 40.96, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (23, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 5.67, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (24, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 22.96, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (25, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 34.70, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (26, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 34.63, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (27, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 73.00, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (28, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 58.00, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (29, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 8.082, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (30, NULL, 1, '2026-09-30 07:00:00', 'E', 'AJUSTE', 44.00, 'Saldo de abertura (contagem fisica) ao implantar o controle de estoque'),
+  (22, 1, 1, '2026-10-04 08:00:00', 'E', 'COMPRA', 8.04, 'Recebimento do pedido de compra 1'),
+  (24, 2, 1, '2026-10-04 08:00:00', 'E', 'COMPRA', 6.04, 'Recebimento do pedido de compra 1'),
+  (8, 3, 1, '2026-10-04 08:00:00', 'E', 'COMPRA', 24.64, 'Recebimento do pedido de compra 2'),
+  (17, 4, 1, '2026-10-04 08:00:00', 'E', 'COMPRA', 29.55, 'Recebimento do pedido de compra 2'),
+  (8, 5, 1, '2026-10-07 08:00:00', 'E', 'COMPRA', 35.43, 'Recebimento do pedido de compra 3'),
+  (15, 6, 1, '2026-10-07 08:00:00', 'E', 'COMPRA', 10.59, 'Recebimento do pedido de compra 3'),
+  (19, 7, 1, '2026-10-07 08:00:00', 'E', 'COMPRA', 14.73, 'Recebimento do pedido de compra 3'),
+  (25, 8, 1, '2026-10-11 08:00:00', 'E', 'COMPRA', 18.3, 'Recebimento do pedido de compra 4'),
+  (11, 9, 1, '2026-10-11 08:00:00', 'E', 'COMPRA', 17.04, 'Recebimento do pedido de compra 4'),
+  (26, 10, 1, '2026-10-12 08:00:00', 'E', 'COMPRA', 9.37, 'Recebimento do pedido de compra 5'),
+  (2, 11, 1, '2026-10-12 08:00:00', 'E', 'COMPRA', 7.76, 'Recebimento do pedido de compra 5'),
+  (24, 12, 1, '2026-10-12 08:00:00', 'E', 'COMPRA', 27.0, 'Recebimento do pedido de compra 5'),
+  (19, 13, 1, '2026-10-14 08:00:00', 'E', 'COMPRA', 28.14, 'Recebimento do pedido de compra 6'),
+  (7, 14, 1, '2026-10-14 08:00:00', 'E', 'COMPRA', 39.48, 'Recebimento do pedido de compra 6'),
+  (23, 15, 1, '2026-10-14 08:00:00', 'E', 'COMPRA', 35.33, 'Recebimento do pedido de compra 6'),
+  (9, 16, 1, '2026-10-16 08:00:00', 'E', 'COMPRA', 10.69, 'Recebimento do pedido de compra 7'),
+  (15, 17, 1, '2026-10-16 08:00:00', 'E', 'COMPRA', 28.46, 'Recebimento do pedido de compra 7'),
+  (21, 18, 1, '2026-10-16 08:00:00', 'E', 'COMPRA', 28.92, 'Recebimento do pedido de compra 7');
+
+-- Venda (o antigo canal 'delivery' virou TELEFONE/WHATSAPP + uma linha em ENTREGA; valor_total deixou de ser coluna: ver VW_TOTAL_VENDA)
+INSERT INTO VENDA (ID_CLIENTE, ID_FUNCIONARIO, ID_FUNCIONARIO_AUTORIZADOR, DT_HORA_VENDA, TP_CANAL, TP_FORMA_PAGAMENTO, ST_VENDA, VL_DESCONTO, DT_VENCIMENTO, DT_PAGAMENTO, NR_CUPOM_FISCAL, DT_PREVISTA_ATENDIMENTO) VALUES
+  (NULL, 3, NULL, '2026-10-01 16:45:00', 'WHATSAPP', 'PIX', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 3, NULL, '2026-10-02 09:15:00', 'WHATSAPP', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (14, 2, NULL, '2026-10-03 19:30:00', 'TELEFONE', 'PIX', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 2, NULL, '2026-10-04 17:15:00', 'BALCAO', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (3, 10, NULL, '2026-10-05 08:30:00', 'BALCAO', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (7, 5, NULL, '2026-10-06 15:45:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-21', NULL, NULL, NULL),
+  (NULL, 8, 1, '2026-10-07 16:15:00', 'BALCAO', 'DINHEIRO', 'CONCLUIDA', 1.25, NULL, NULL, NULL, NULL),
+  (16, 5, NULL, '2026-10-08 17:45:00', 'BALCAO', 'PIX', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (11, 8, NULL, '2026-10-09 18:00:00', 'TELEFONE', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (18, 5, NULL, '2026-10-10 10:00:00', 'TELEFONE', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 7, NULL, '2026-10-11 07:15:00', 'TELEFONE', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 6, NULL, '2026-10-12 11:15:00', 'BALCAO', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (6, 5, NULL, '2026-10-13 15:15:00', 'BALCAO', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 6, NULL, '2026-10-14 07:00:00', 'TELEFONE', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 2, NULL, '2026-10-15 09:30:00', 'TELEFONE', 'DINHEIRO', 'CANCELADA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 10, NULL, '2026-10-16 09:30:00', 'BALCAO', 'PIX', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (4, 11, NULL, '2026-10-17 11:00:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-11-01', NULL, NULL, NULL),
+  (NULL, 3, NULL, '2026-10-18 11:00:00', 'BALCAO', 'DINHEIRO', 'CANCELADA', 0.00, NULL, NULL, NULL, NULL),
+  (5, 8, NULL, '2026-10-19 13:00:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-11-03', NULL, NULL, NULL),
+  (NULL, 10, NULL, '2026-10-20 12:15:00', 'WHATSAPP', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 2, NULL, '2026-10-21 07:15:00', 'TELEFONE', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (8, 4, NULL, '2026-10-22 14:15:00', 'BALCAO', 'FIADO', 'CONCLUIDA', 0.00, '2026-11-21', '2026-10-29', NULL, NULL),
+  (NULL, 9, NULL, '2026-10-23 07:00:00', 'BALCAO', 'CARTAO_CREDITO', 'CANCELADA', 0.00, NULL, NULL, NULL, NULL),
+  (18, 3, NULL, '2026-10-24 11:00:00', 'WHATSAPP', 'BOLETO', 'CONCLUIDA', 0.00, '2026-11-08', '2026-10-31', NULL, NULL),
+  (14, 11, NULL, '2026-10-01 17:00:00', 'TELEFONE', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-16', NULL, NULL, NULL),
+  (NULL, 5, NULL, '2026-10-02 16:30:00', 'TELEFONE', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 9, NULL, '2026-10-03 15:45:00', 'TELEFONE', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 10, NULL, '2026-10-04 09:00:00', 'BALCAO', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (1, 3, NULL, '2026-10-05 10:45:00', 'TELEFONE', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 6, NULL, '2026-10-06 15:30:00', 'TELEFONE', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (3, 10, NULL, '2026-10-07 19:45:00', 'TELEFONE', 'FIADO', 'CONCLUIDA', 0.00, '2026-11-06', NULL, NULL, NULL),
+  (NULL, 2, NULL, '2026-10-08 08:45:00', 'TELEFONE', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (18, 3, 1, '2026-10-09 12:30:00', 'TELEFONE', 'BOLETO', 'CONCLUIDA', 6.28, '2026-10-24', NULL, NULL, NULL),
+  (NULL, 9, 1, '2026-10-10 18:15:00', 'TELEFONE', 'VALE_ALIMENTACAO', 'CANCELADA', 17.06, NULL, NULL, NULL, NULL),
+  (NULL, 2, NULL, '2026-10-11 10:45:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (1, 10, NULL, '2026-10-12 08:00:00', 'BALCAO', 'FIADO', 'CONCLUIDA', 0.00, '2026-11-11', '2026-10-19', NULL, NULL),
+  (4, 6, NULL, '2026-10-13 19:30:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-28', NULL, NULL, NULL),
+  (8, 6, NULL, '2026-10-14 13:15:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-29', NULL, NULL, NULL),
+  (NULL, 5, NULL, '2026-10-15 17:30:00', 'BALCAO', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 5, NULL, '2026-10-16 17:30:00', 'WHATSAPP', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (2, 6, NULL, '2026-10-17 19:45:00', 'WHATSAPP', 'FIADO', 'CONCLUIDA', 0.00, '2026-11-16', '2026-10-24', NULL, NULL),
+  (14, 10, NULL, '2026-10-18 15:00:00', 'WHATSAPP', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (8, 11, NULL, '2026-10-19 19:00:00', 'BALCAO', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (18, 10, NULL, '2026-10-20 11:15:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-11-04', '2026-10-27', NULL, NULL),
+  (NULL, 10, NULL, '2026-10-21 08:15:00', 'BALCAO', 'CARTAO_CREDITO', 'CANCELADA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 7, NULL, '2026-10-22 09:45:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 9, NULL, '2026-10-23 08:00:00', 'BALCAO', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 3, NULL, '2026-10-24 16:15:00', 'WHATSAPP', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (6, 8, NULL, '2026-10-01 10:30:00', 'TELEFONE', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (15, 11, NULL, '2026-10-02 11:00:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-17', NULL, NULL, NULL),
+  (NULL, 10, NULL, '2026-10-03 13:00:00', 'WHATSAPP', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 8, 1, '2026-10-04 18:30:00', 'TELEFONE', 'CARTAO_CREDITO', 'CONCLUIDA', 13.92, NULL, NULL, NULL, NULL),
+  (1, 8, NULL, '2026-10-05 12:30:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-20', NULL, NULL, NULL),
+  (NULL, 4, NULL, '2026-10-06 16:45:00', 'WHATSAPP', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 7, NULL, '2026-10-07 17:45:00', 'WHATSAPP', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (12, 7, NULL, '2026-10-08 07:45:00', 'TELEFONE', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (1, 9, NULL, '2026-10-09 07:15:00', 'TELEFONE', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 11, NULL, '2026-10-10 09:45:00', 'WHATSAPP', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (17, 3, NULL, '2026-10-11 09:00:00', 'BALCAO', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (18, 4, NULL, '2026-10-12 09:45:00', 'WHATSAPP', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 4, NULL, '2026-10-13 13:00:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 5, NULL, '2026-10-14 08:45:00', 'BALCAO', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 4, NULL, '2026-10-15 12:45:00', 'BALCAO', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (10, 8, NULL, '2026-10-16 13:00:00', 'WHATSAPP', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-31', '2026-10-23', NULL, NULL),
+  (6, 5, NULL, '2026-10-17 13:15:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-11-01', NULL, NULL, NULL),
+  (NULL, 4, NULL, '2026-10-18 14:15:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 4, 1, '2026-10-19 17:15:00', 'BALCAO', 'VALE_ALIMENTACAO', 'CONCLUIDA', 5.43, NULL, NULL, NULL, NULL),
+  (13, 11, NULL, '2026-10-20 12:30:00', 'WHATSAPP', 'CARTAO_CREDITO', 'CANCELADA', 0.00, NULL, NULL, NULL, NULL),
+  (7, 2, NULL, '2026-10-21 11:15:00', 'WHATSAPP', 'VALE_ALIMENTACAO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 2, NULL, '2026-10-22 14:00:00', 'WHATSAPP', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 11, NULL, '2026-10-23 15:30:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (13, 2, NULL, '2026-10-24 10:45:00', 'WHATSAPP', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (8, 2, NULL, '2026-10-01 11:45:00', 'TELEFONE', 'FIADO', 'CONCLUIDA', 0.00, '2026-10-31', '2026-10-08', NULL, NULL),
+  (2, 9, NULL, '2026-10-02 17:45:00', 'BALCAO', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (5, 5, NULL, '2026-10-03 13:45:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-18', '2026-10-10', NULL, NULL),
+  (NULL, 4, NULL, '2026-10-04 07:30:00', 'BALCAO', 'PIX', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (4, 3, NULL, '2026-10-05 17:30:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (18, 10, 1, '2026-10-06 10:15:00', 'WHATSAPP', 'PIX', 'CONCLUIDA', 6.65, NULL, NULL, NULL, NULL),
+  (NULL, 11, NULL, '2026-10-07 09:15:00', 'WHATSAPP', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (5, 9, NULL, '2026-10-08 10:30:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-23', NULL, NULL, NULL),
+  (17, 7, NULL, '2026-10-09 14:15:00', 'WHATSAPP', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-24', NULL, NULL, NULL),
+  (3, 4, NULL, '2026-10-10 17:00:00', 'TELEFONE', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 5, NULL, '2026-10-11 16:30:00', 'TELEFONE', 'DINHEIRO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 4, NULL, '2026-10-12 19:15:00', 'TELEFONE', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (4, 8, NULL, '2026-10-13 14:00:00', 'BALCAO', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-28', NULL, NULL, NULL),
+  (2, 3, NULL, '2026-10-14 13:30:00', 'WHATSAPP', 'BOLETO', 'CONCLUIDA', 0.00, '2026-10-29', NULL, NULL, NULL),
+  (NULL, 11, NULL, '2026-10-15 12:30:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 11, NULL, '2026-10-16 11:00:00', 'BALCAO', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (14, 5, NULL, '2026-10-17 17:00:00', 'BALCAO', 'CARTAO_DEBITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL),
+  (NULL, 7, NULL, '2026-10-18 09:15:00', 'WHATSAPP', 'CARTAO_CREDITO', 'CONCLUIDA', 0.00, NULL, NULL, NULL, NULL);
+
+-- Item de Venda (entidade associativa 'vende')
+INSERT INTO ITEM_VENDA (ID_VENDA, ID_PRODUTO, QT_VENDIDA, VL_UNITARIO_VENDA) VALUES
   (1, 25, 1.0, 9.90),
   (2, 17, 1.0, 22.90),
   (2, 9, 2.137, 26.90),
@@ -674,73 +790,125 @@ INSERT INTO venda_produto (id_venda, id_produto, peso_quantidade, preco_unitario
   (90, 15, 2.338, 14.90),
   (90, 14, 0.607, 18.90);
 
+-- Entrega: uma por venda delivery concluida (endereco do cliente; sem cliente, endereco ficticio)
+INSERT INTO ENTREGA (ID_VENDA, ID_FUNCIONARIO_ENTREGADOR, DS_LOGRADOURO, NR_ENDERECO, NM_BAIRRO, NR_CEP, ST_ENTREGA, DT_HORA_SAIDA, DT_HORA_ENTREGA) VALUES
+  (2, 12, 'Rua das Mangueiras', '150', 'Jardim Alegre', '13021450', 'ENTREGUE', '2026-10-02 09:35:00', '2026-10-02 10:20:00'),
+  (3, 12, 'Rua das Oliveiras', '58', 'Centro', '13017318', 'ENTREGUE', '2026-10-03 19:50:00', '2026-10-03 20:35:00'),
+  (9, 12, 'Rua do Comercio', '12', 'Santo Antonio', '13013607', 'ENTREGUE', '2026-10-09 18:20:00', '2026-10-09 19:05:00'),
+  (20, 12, 'Rua das Mangueiras', '150', 'Jardim Alegre', '13021450', 'ENTREGUE', '2026-10-20 12:35:00', '2026-10-20 13:20:00'),
+  (21, 12, 'Rua do Bosque', '88', 'Vila Nova', '13021880', 'ENTREGUE', '2026-10-21 07:35:00', '2026-10-21 08:20:00'),
+  (24, 12, 'Rua Marechal Deodoro', '155', 'Santo Antonio', '13022266', 'ENTREGUE', '2026-10-24 11:20:00', '2026-10-24 12:05:00'),
+  (25, 12, 'Rua das Oliveiras', '58', 'Centro', '13017318', 'ENTREGUE', '2026-10-01 17:20:00', '2026-10-01 18:05:00'),
+  (27, 12, 'Rua do Bosque', '88', 'Vila Nova', '13021880', 'ENTREGUE', '2026-10-03 16:05:00', '2026-10-03 16:50:00'),
+  (31, 12, 'Av. Central', '900', 'Bela Vista', '13003711', 'ENTREGUE', '2026-10-07 20:05:00', '2026-10-07 20:50:00'),
+  (49, 12, 'Rua Bela Vista', '15', 'Parque das Flores', '13007422', 'ENTREGUE', '2026-10-01 10:50:00', '2026-10-01 11:35:00'),
+  (54, 12, 'Rua do Bosque', '88', 'Vila Nova', '13021880', 'ENTREGUE', '2026-10-06 17:05:00', '2026-10-06 17:50:00'),
+  (57, 12, 'Rua das Acacias', '120', 'Jardim Alegre', '13001237', 'ENTREGUE', '2026-10-09 07:35:00', '2026-10-09 08:20:00'),
+  (58, 12, 'Rua das Mangueiras', '150', 'Jardim Alegre', '13021450', 'ENTREGUE', '2026-10-10 10:05:00', '2026-10-10 10:50:00'),
+  (64, 12, 'Rua das Hortensias', '64', 'Bela Vista', '13012370', 'ENTREGUE', '2026-10-16 13:20:00', '2026-10-16 14:05:00'),
+  (73, 12, 'Av. das Nacoes', '500', 'Jardim Alegre', '13009896', 'ENTREGUE', '2026-10-01 12:05:00', '2026-10-01 12:50:00'),
+  (86, 12, 'Rua das Palmeiras', '45', 'Vila Nova', '13002474', 'ENTREGUE', '2026-10-14 13:50:00', '2026-10-14 14:35:00');
+
 -- =====================================================================================
 -- 4) SELECT com JOIN  (consultas que cruzam multiplas tabelas)
 -- =====================================================================================
 
--- 4.1 Vendas com nome do cliente (quando houver) e nome do funcionario que atendeu
+-- 4.1 Vendas recentes com nome do cliente (quando houver) e do funcionario que atendeu
 SELECT
-    v.id_venda,
-    v.data_hora,
-    v.canal,
-    COALESCE(c.nome_razao_social, '(cliente nao identificado)') AS cliente,
-    f.nome                                                        AS atendido_por,
-    v.forma_pagamento,
-    v.valor_total,
-    v.status
-FROM venda v
-JOIN funcionario f  ON f.id_funcionario = v.id_funcionario
-LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-ORDER BY v.data_hora DESC
+    v.ID_VENDA,
+    v.DT_HORA_VENDA,
+    v.TP_CANAL,
+    COALESCE(c.NM_CLIENTE, '(sem cadastro)') AS CLIENTE,
+    f.NM_FUNCIONARIO                         AS ATENDIDO_POR,
+    v.TP_FORMA_PAGAMENTO,
+    v.ST_VENDA
+FROM VENDA v
+JOIN FUNCIONARIO f  ON f.ID_FUNCIONARIO = v.ID_FUNCIONARIO
+LEFT JOIN CLIENTE c ON c.ID_CLIENTE = v.ID_CLIENTE
+ORDER BY v.DT_HORA_VENDA DESC
 LIMIT 20;
 
--- 4.2 Itens vendidos com nome do produto e categoria (3 tabelas)
+-- 4.2 Itens vendidos com nome do produto e categoria (4 tabelas)
 SELECT
-    v.id_venda,
-    v.data_hora,
-    p.nome            AS produto,
-    cat.descricao      AS categoria,
-    vp.peso_quantidade,
-    vp.preco_unitario,
-    ROUND(vp.peso_quantidade * vp.preco_unitario, 2) AS subtotal_item
-FROM venda_produto vp
-JOIN venda v             ON v.id_venda = vp.id_venda
-JOIN produto p            ON p.id_produto = vp.id_produto
-JOIN categoria_produto cat ON cat.id_categoria = p.id_categoria
-ORDER BY v.data_hora DESC
+    v.ID_VENDA,
+    v.DT_HORA_VENDA,
+    p.NM_PRODUTO,
+    cat.NM_CATEGORIA,
+    i.QT_VENDIDA,
+    i.VL_UNITARIO_VENDA,
+    ROUND(i.QT_VENDIDA * i.VL_UNITARIO_VENDA, 2) AS SUBTOTAL_ITEM
+FROM ITEM_VENDA i
+JOIN VENDA v      ON v.ID_VENDA = i.ID_VENDA
+JOIN PRODUTO p    ON p.ID_PRODUTO = i.ID_PRODUTO
+JOIN CATEGORIA cat ON cat.ID_CATEGORIA = p.ID_CATEGORIA
+ORDER BY v.DT_HORA_VENDA DESC
 LIMIT 20;
 
 -- 4.3 Pedidos de compra com fornecedor, funcionario responsavel e custo total do pedido
 SELECT
-    pc.id_pedido_compra,
-    f.nome_razao_social AS fornecedor,
-    fu.nome              AS comprado_por,
-    pc.data_pedido,
-    pc.prazo_entrega,
-    pc.status,
-    ROUND(SUM(pcp.quantidade * pcp.preco_unitario_compra), 2) AS custo_total_pedido
-FROM pedido_compra pc
-JOIN fornecedor f        ON f.id_fornecedor = pc.id_fornecedor
-JOIN funcionario fu       ON fu.id_funcionario = pc.id_funcionario
-JOIN pedido_compra_produto pcp ON pcp.id_pedido_compra = pc.id_pedido_compra
-GROUP BY pc.id_pedido_compra, f.nome_razao_social, fu.nome, pc.data_pedido,
-         pc.prazo_entrega, pc.status
-ORDER BY pc.data_pedido;
+    pc.ID_PEDIDO_COMPRA,
+    f.NM_FORNECEDOR,
+    fu.NM_FUNCIONARIO AS COMPRADO_POR,
+    pc.DT_PEDIDO,
+    pc.DT_PREVISTA_ENTREGA,
+    pc.ST_PEDIDO,
+    ROUND(SUM(i.QT_PEDIDA * i.VL_UNITARIO_COMPRA), 2) AS CUSTO_TOTAL_PEDIDO
+FROM PEDIDO_COMPRA pc
+JOIN FORNECEDOR f  ON f.ID_FORNECEDOR = pc.ID_FORNECEDOR
+JOIN FUNCIONARIO fu ON fu.ID_FUNCIONARIO = pc.ID_FUNCIONARIO
+JOIN ITEM_PEDIDO_COMPRA i ON i.ID_PEDIDO_COMPRA = pc.ID_PEDIDO_COMPRA
+GROUP BY pc.ID_PEDIDO_COMPRA, f.NM_FORNECEDOR, fu.NM_FUNCIONARIO, pc.DT_PEDIDO,
+         pc.DT_PREVISTA_ENTREGA, pc.ST_PEDIDO
+ORDER BY pc.DT_PEDIDO;
 
--- 4.4 Clientes autorizados a fiado e o total que ja compraram fiado (mesmo pago)
+-- 4.4 Clientes autorizados a prazo e o total que ja compraram no fiado (mesmo pago)
 SELECT
-    c.id_cliente,
-    c.nome_razao_social,
-    c.autorizado_prazo,
-    COUNT(v.id_venda)         AS qtd_vendas_fiado,
-    COALESCE(SUM(v.valor_total), 0) AS total_fiado
-FROM cliente c
-LEFT JOIN venda v
-       ON v.id_cliente = c.id_cliente
-      AND v.forma_pagamento = 'fiado'
-WHERE c.autorizado_prazo = TRUE
-GROUP BY c.id_cliente, c.nome_razao_social, c.autorizado_prazo
-ORDER BY total_fiado DESC;
+    c.ID_CLIENTE,
+    c.NM_CLIENTE,
+    c.IN_AUTORIZADO_PRAZO,
+    COUNT(v.ID_VENDA)                    AS QT_VENDAS_FIADO,
+    COALESCE(SUM(t.VL_LIQUIDO), 0)       AS TOTAL_FIADO
+FROM CLIENTE c
+LEFT JOIN VENDA v
+       ON v.ID_CLIENTE = c.ID_CLIENTE
+      AND v.TP_FORMA_PAGAMENTO = 'FIADO'
+LEFT JOIN VW_TOTAL_VENDA t ON t.ID_VENDA = v.ID_VENDA
+WHERE c.IN_AUTORIZADO_PRAZO = 1
+GROUP BY c.ID_CLIENTE, c.NM_CLIENTE, c.IN_AUTORIZADO_PRAZO
+ORDER BY TOTAL_FIADO DESC;
+
+-- 4.5 Entregas com a venda, o cliente e o entregador (4 tabelas)
+SELECT
+    e.ID_ENTREGA,
+    v.ID_VENDA,
+    COALESCE(c.NM_CLIENTE, '(sem cadastro)') AS CLIENTE,
+    fu.NM_FUNCIONARIO                        AS ENTREGADOR,
+    e.NM_BAIRRO,
+    e.DT_HORA_SAIDA,
+    e.DT_HORA_ENTREGA,
+    TIMESTAMPDIFF(MINUTE, e.DT_HORA_SAIDA, e.DT_HORA_ENTREGA) AS MIN_ENTREGA
+FROM ENTREGA e
+JOIN VENDA v        ON v.ID_VENDA = e.ID_VENDA
+JOIN FUNCIONARIO fu ON fu.ID_FUNCIONARIO = e.ID_FUNCIONARIO_ENTREGADOR
+LEFT JOIN CLIENTE c ON c.ID_CLIENTE = v.ID_CLIENTE
+ORDER BY e.DT_HORA_SAIDA DESC;
+
+-- 4.6 Lotes com produto, categoria, pedido de origem e fornecedor (5 tabelas)
+SELECT
+    l.ID_LOTE,
+    l.NR_LOTE,
+    p.NM_PRODUTO,
+    cat.NM_CATEGORIA,
+    pc.ID_PEDIDO_COMPRA,
+    f.NM_FORNECEDOR,
+    l.DT_VALIDADE,
+    l.NR_REGISTRO_INSPECAO
+FROM LOTE l
+JOIN PRODUTO p        ON p.ID_PRODUTO = l.ID_PRODUTO
+JOIN CATEGORIA cat    ON cat.ID_CATEGORIA = p.ID_CATEGORIA
+JOIN PEDIDO_COMPRA pc ON pc.ID_PEDIDO_COMPRA = l.ID_PEDIDO_COMPRA
+JOIN FORNECEDOR f     ON f.ID_FORNECEDOR = pc.ID_FORNECEDOR
+ORDER BY l.DT_VALIDADE;
 
 
 -- =====================================================================================
@@ -748,253 +916,357 @@ ORDER BY total_fiado DESC;
 -- =====================================================================================
 
 -- 5.1 Reajuste de 5% no preco de venda de toda a categoria "Carne Bovina"
-UPDATE produto p
-JOIN categoria_produto cat ON cat.id_categoria = p.id_categoria
-SET p.preco = ROUND(p.preco * 1.05, 2)
-WHERE cat.descricao = 'Carne Bovina';
+UPDATE PRODUTO p
+JOIN CATEGORIA cat ON cat.ID_CATEGORIA = p.ID_CATEGORIA
+SET p.VL_PRECO_VENDA = ROUND(p.VL_PRECO_VENDA * 1.05, 2)
+WHERE cat.NM_CATEGORIA = 'Carne Bovina';
 
--- 5.2 Baixa manual de pagamento: marca como "pago" os fiados vencidos ha mais de 30 dias
--- que o cliente foi ate a loja e quitou (simulando a rotina da responsavel financeira)
-UPDATE venda
-SET status_pagamento = 'pago'
-WHERE forma_pagamento = 'fiado'
-  AND status_pagamento = 'em_aberto'
-  AND data_vencimento < '2026-10-20';
+-- 5.2 Baixa manual de pagamento: registra a data de pagamento dos fiados em aberto
+-- com vencimento ate 06/11/2026 que o cliente foi quitar na loja (rotina da
+-- responsavel financeira; "pago" = DT_PAGAMENTO preenchida)
+UPDATE VENDA
+SET DT_PAGAMENTO = '2026-11-06'
+WHERE TP_FORMA_PAGAMENTO = 'FIADO'
+  AND DT_PAGAMENTO IS NULL
+  AND ST_VENDA <> 'CANCELADA'
+  AND DT_VENCIMENTO <= '2026-11-06';
 
 -- 5.3 Correcao cadastral: atualiza o telefone de um fornecedor
-UPDATE fornecedor
-SET telefone_whatsapp = '11999887766'
-WHERE nome_razao_social = 'Frigorifico Boi Forte Ltda';
+UPDATE FORNECEDOR
+SET NR_TELEFONE = '11999887766'
+WHERE NM_FORNECEDOR = 'Frigorifico Boi Forte Ltda';
 
--- 5.4 Recebimento de pedido de compra: muda status para "recebido" e da entrada no
--- estoque dos produtos daquele pedido (resolve, na pratica, o problema P1 -- hoje as
--- entradas nao geram nenhuma movimentacao de estoque)
-UPDATE produto p
-JOIN pedido_compra_produto pcp ON pcp.id_produto = p.id_produto
-SET p.estoque_atual = p.estoque_atual + pcp.quantidade
-WHERE pcp.id_pedido_compra = 10;
+-- 5.4 Recebimento do pedido de compra 10: o pedido passa a RECEBIDO (com data e nota
+-- fiscal, exigidas pelo CHECK), cada item gera um LOTE e cada lote gera uma
+-- MOVIMENTACAO_ESTOQUE de entrada por COMPRA -- o saldo em VW_SALDO_ESTOQUE sobe
+-- sozinho (resolve P2: hoje as entradas nao geram nenhum registro de estoque)
+UPDATE PEDIDO_COMPRA
+SET ST_PEDIDO = 'RECEBIDO', DT_RECEBIMENTO = '2026-10-26', NR_NOTA_FISCAL = 'NF-1010'
+WHERE ID_PEDIDO_COMPRA = 10;
 
-UPDATE pedido_compra
-SET status = 'recebido'
-WHERE id_pedido_compra = 10;
+INSERT INTO LOTE (ID_PEDIDO_COMPRA, ID_PRODUTO, NR_LOTE, DT_VALIDADE, NR_REGISTRO_INSPECAO)
+SELECT i.ID_PEDIDO_COMPRA, i.ID_PRODUTO, CONCAT('L10-', LPAD(i.ID_PRODUTO, 2, '0')),
+       DATE_ADD('2026-10-26', INTERVAL 180 DAY), NULL
+FROM ITEM_PEDIDO_COMPRA i
+WHERE i.ID_PEDIDO_COMPRA = 10;
+
+INSERT INTO MOVIMENTACAO_ESTOQUE
+       (ID_PRODUTO, ID_LOTE, ID_FUNCIONARIO, DT_HORA_MOVIMENTACAO, TP_SENTIDO, TP_MOTIVO, QT_MOVIMENTADA, DS_OBSERVACAO)
+SELECT i.ID_PRODUTO, l.ID_LOTE, pc.ID_FUNCIONARIO, '2026-10-26 08:00:00', 'E', 'COMPRA',
+       i.QT_PEDIDA, 'Recebimento do pedido de compra 10'
+FROM ITEM_PEDIDO_COMPRA i
+JOIN PEDIDO_COMPRA pc ON pc.ID_PEDIDO_COMPRA = i.ID_PEDIDO_COMPRA
+JOIN LOTE l ON l.ID_PEDIDO_COMPRA = i.ID_PEDIDO_COMPRA AND l.ID_PRODUTO = i.ID_PRODUTO
+WHERE i.ID_PEDIDO_COMPRA = 10;
 
 
 -- =====================================================================================
 -- 6) DELETE
 -- =====================================================================================
 
--- 6.1 Remove um pedido de compra cancelado (e, em cascata, seus itens na tabela
--- associativa pedido_compra_produto)
-DELETE FROM pedido_compra
-WHERE status = 'cancelado';
+-- 6.1 Remove um pedido de compra cancelado e, antes, seus itens (as FKs nao tem
+-- ON DELETE CASCADE: o filho sai primeiro)
+DELETE FROM ITEM_PEDIDO_COMPRA
+WHERE ID_PEDIDO_COMPRA IN (SELECT ID_PEDIDO_COMPRA FROM PEDIDO_COMPRA WHERE ST_PEDIDO = 'CANCELADO');
+
+DELETE FROM PEDIDO_COMPRA
+WHERE ST_PEDIDO = 'CANCELADO';
 
 -- 6.2 Remove um cliente cadastrado por engano, que nunca teve nenhuma venda
--- (nao tem FK pendente, entao o DELETE e seguro)
-DELETE FROM cliente
-WHERE nome_razao_social = 'Marcelo Souza Prado'
+-- (sem FK pendente, entao o DELETE e seguro)
+DELETE FROM CLIENTE
+WHERE NM_CLIENTE = 'Marcelo Souza Prado'
   AND NOT EXISTS (
-        SELECT 1 FROM venda v WHERE v.id_cliente = cliente.id_cliente
+        SELECT 1 FROM VENDA v WHERE v.ID_CLIENTE = CLIENTE.ID_CLIENTE
   );
 
--- 6.3 Remove vendas canceladas com mais de 60 dias (politica de limpeza de dados
--- operacionais que nao tem mais valor de auditoria); os itens em venda_produto saem
--- junto por causa do ON DELETE CASCADE
-DELETE FROM venda
-WHERE status = 'cancelada'
-  AND data_hora < '2026-09-01 00:00:00';
+-- 6.3 Remove vendas canceladas com mais de 60 dias (limpeza de dados operacionais sem
+-- valor de auditoria): primeiro entrega e itens, depois a venda
+DELETE FROM ENTREGA
+WHERE ID_VENDA IN (SELECT ID_VENDA FROM VENDA
+                   WHERE ST_VENDA = 'CANCELADA' AND DT_HORA_VENDA < '2026-09-01 00:00:00');
+
+DELETE FROM ITEM_VENDA
+WHERE ID_VENDA IN (SELECT ID_VENDA FROM VENDA
+                   WHERE ST_VENDA = 'CANCELADA' AND DT_HORA_VENDA < '2026-09-01 00:00:00');
+
+DELETE FROM VENDA
+WHERE ST_VENDA = 'CANCELADA'
+  AND DT_HORA_VENDA < '2026-09-01 00:00:00';
 
 
 -- =====================================================================================
 -- 7) CONSULTAS GERENCIAIS
--- Numeracao de problemas (levantamento de campo, secao "Problemas de gestao
--- identificados"):
---   P1 - Estoque sem saldo automatico e sem estoque minimo parametrizado
---   P2 - Fornecedores e cotacoes fora do sistema (cadastro so na agenda do celular)
---   P3 - Controle de fiado/boleto em planilha manual, com baixa manual
---   P4 - Ausencia de cadastro geral de clientes e de historico de compras
+-- Problemas de gestao (levantamento de campo):
+--   P1 - Fornecedores e cotacoes fora do sistema (so na agenda do celular)
+--   P2 - Estoque sem saldo automatico e sem registro de entradas
+--   P3 - Estoque minimo nao parametrizado
+--   P4 - Desossa sem rastreabilidade de rendimento/perda
+--   P5 - Controle de fiado/boleto em planilha manual, com baixa manual
+--   P6 - Validade, lotes e perdas sem rastreabilidade
 -- =====================================================================================
 
 -- G01 — Quais produtos estao hoje abaixo do estoque minimo?
--- Atende: P1 (ruptura de estoque sem controle automatizado)
+-- Atende: P3 (ruptura de estoque sem controle automatizado)
 SELECT
-    p.id_produto,
-    p.nome,
-    cat.descricao     AS categoria,
-    p.estoque_atual,
-    p.estoque_minimo,
-    (p.estoque_minimo - p.estoque_atual) AS falta_para_o_minimo
-FROM produto p
-JOIN categoria_produto cat ON cat.id_categoria = p.id_categoria
-WHERE p.estoque_atual < p.estoque_minimo
-ORDER BY falta_para_o_minimo DESC;
+    p.ID_PRODUTO,
+    p.NM_PRODUTO,
+    cat.NM_CATEGORIA,
+    s.QT_SALDO,
+    p.QT_ESTOQUE_MINIMO,
+    (p.QT_ESTOQUE_MINIMO - s.QT_SALDO) AS FALTA_PARA_O_MINIMO
+FROM PRODUTO p
+JOIN CATEGORIA cat        ON cat.ID_CATEGORIA = p.ID_CATEGORIA
+JOIN VW_SALDO_ESTOQUE s   ON s.ID_PRODUTO = p.ID_PRODUTO
+WHERE p.IN_ATIVO = 1
+  AND s.QT_SALDO < p.QT_ESTOQUE_MINIMO
+ORDER BY FALTA_PARA_O_MINIMO DESC;
 
 -- G02 — Qual o faturamento (vendas concluidas) por forma de pagamento no periodo?
--- Atende: P3 (visibilidade sobre dinheiro/pix/cartao/fiado/boleto, hoje so em planilha)
+-- Atende: P5 (visibilidade sobre dinheiro/pix/cartao/fiado/boleto, hoje so em planilha)
 SELECT
-    forma_pagamento,
-    COUNT(*)                   AS qtd_vendas,
-    ROUND(SUM(valor_total), 2) AS faturamento
-FROM venda
-WHERE status = 'concluida'
-  AND data_hora BETWEEN '2026-10-01 00:00:00' AND '2026-10-24 23:59:59'
-GROUP BY forma_pagamento
-ORDER BY faturamento DESC;
+    v.TP_FORMA_PAGAMENTO,
+    COUNT(*)                     AS QT_VENDAS,
+    ROUND(SUM(t.VL_LIQUIDO), 2)  AS FATURAMENTO
+FROM VENDA v
+JOIN VW_TOTAL_VENDA t ON t.ID_VENDA = v.ID_VENDA
+WHERE v.ST_VENDA = 'CONCLUIDA'
+  AND v.DT_HORA_VENDA BETWEEN '2026-10-01 00:00:00' AND '2026-10-24 23:59:59'
+GROUP BY v.TP_FORMA_PAGAMENTO
+ORDER BY FATURAMENTO DESC;
 
--- G03 — Qual o faturamento diario no periodo (para acompanhar os 300-400
+-- G03 — Qual o faturamento liquido diario no periodo (para acompanhar o volume de
 -- atendimentos/dia que o dono relatou)?
--- Atende: visao gerencial geral de volume e faturamento por dia
+-- Atende: visao gerencial geral de volume e faturamento por dia (KPI faturamento liquido)
 SELECT
-    DATE(data_hora)              AS dia,
-    COUNT(*)                     AS qtd_vendas,
-    ROUND(SUM(valor_total), 2)   AS faturamento_dia
-FROM venda
-WHERE status = 'concluida'
-GROUP BY DATE(data_hora)
-ORDER BY dia;
+    DATE(v.DT_HORA_VENDA)         AS DIA,
+    COUNT(*)                      AS QT_VENDAS,
+    ROUND(SUM(t.VL_LIQUIDO), 2)   AS FATURAMENTO_DIA
+FROM VENDA v
+JOIN VW_TOTAL_VENDA t ON t.ID_VENDA = v.ID_VENDA
+WHERE v.ST_VENDA = 'CONCLUIDA'
+GROUP BY DATE(v.DT_HORA_VENDA)
+ORDER BY DIA;
 
--- G04 — Quanto cada cliente autorizado a fiado deve atualmente (em aberto ou atrasado)?
--- Atende: P3 (controle de valores devidos, hoje em planilha com baixa manual)
+-- G04 — Quanto cada cliente deve atualmente em fiado ou boleto (nao pago)?
+-- Atende: P5 (controle de valores devidos, hoje em planilha com baixa manual)
 SELECT
-    c.id_cliente,
-    c.nome_razao_social,
-    c.telefone,
-    COUNT(v.id_venda)              AS vendas_em_aberto,
-    ROUND(SUM(v.valor_total), 2)   AS valor_devido
-FROM cliente c
-JOIN venda v ON v.id_cliente = c.id_cliente
-WHERE v.forma_pagamento = 'fiado'
-  AND v.status_pagamento IN ('em_aberto', 'atrasado')
-GROUP BY c.id_cliente, c.nome_razao_social, c.telefone
-ORDER BY valor_devido DESC;
+    c.ID_CLIENTE,
+    c.NM_CLIENTE,
+    c.NR_TELEFONE,
+    COUNT(v.ID_VENDA)             AS QT_VENDAS_EM_ABERTO,
+    ROUND(SUM(t.VL_LIQUIDO), 2)   AS VALOR_DEVIDO
+FROM CLIENTE c
+JOIN VENDA v          ON v.ID_CLIENTE = c.ID_CLIENTE
+JOIN VW_TOTAL_VENDA t ON t.ID_VENDA = v.ID_VENDA
+WHERE v.TP_FORMA_PAGAMENTO IN ('FIADO', 'BOLETO')
+  AND v.DT_PAGAMENTO IS NULL
+  AND v.ST_VENDA <> 'CANCELADA'
+GROUP BY c.ID_CLIENTE, c.NM_CLIENTE, c.NR_TELEFONE
+ORDER BY VALOR_DEVIDO DESC;
 
 -- G05 — Quais clientes cadastrados nunca fizeram nenhuma compra?
--- Atende: P4 (ausencia de historico de compras / cadastro sem acompanhamento)
+-- Atende: gestao do cadastro de clientes (historico de compras; RN09, sem problema numerado)
 SELECT
-    c.id_cliente,
-    c.nome_razao_social,
-    c.telefone,
-    c.autorizado_prazo
-FROM cliente c
-LEFT JOIN venda v ON v.id_cliente = c.id_cliente
-WHERE v.id_venda IS NULL;
+    c.ID_CLIENTE,
+    c.NM_CLIENTE,
+    c.NR_TELEFONE,
+    c.IN_AUTORIZADO_PRAZO
+FROM CLIENTE c
+LEFT JOIN VENDA v ON v.ID_CLIENTE = c.ID_CLIENTE
+WHERE v.ID_VENDA IS NULL;
 
 -- G06 — Quais os 5 produtos mais vendidos (em valor) no periodo?
--- Atende: visao gerencial de mix de produtos / giro
+-- Atende: visao gerencial de mix de produtos / giro (KPI mix de produtos)
 SELECT
-    p.id_produto,
-    p.nome,
-    cat.descricao                                   AS categoria,
-    ROUND(SUM(vp.peso_quantidade), 3)                AS qtd_total_vendida,
-    ROUND(SUM(vp.peso_quantidade * vp.preco_unitario), 2) AS valor_total_vendido
-FROM venda_produto vp
-JOIN venda v               ON v.id_venda = vp.id_venda
-JOIN produto p              ON p.id_produto = vp.id_produto
-JOIN categoria_produto cat  ON cat.id_categoria = p.id_categoria
-WHERE v.status = 'concluida'
-GROUP BY p.id_produto, p.nome, cat.descricao
-ORDER BY valor_total_vendido DESC
+    p.ID_PRODUTO,
+    p.NM_PRODUTO,
+    cat.NM_CATEGORIA,
+    ROUND(SUM(i.QT_VENDIDA), 3)                           AS QT_TOTAL_VENDIDA,
+    ROUND(SUM(i.QT_VENDIDA * i.VL_UNITARIO_VENDA), 2)     AS VALOR_TOTAL_VENDIDO
+FROM ITEM_VENDA i
+JOIN VENDA v       ON v.ID_VENDA = i.ID_VENDA
+JOIN PRODUTO p     ON p.ID_PRODUTO = i.ID_PRODUTO
+JOIN CATEGORIA cat ON cat.ID_CATEGORIA = p.ID_CATEGORIA
+WHERE v.ST_VENDA = 'CONCLUIDA'
+GROUP BY p.ID_PRODUTO, p.NM_PRODUTO, cat.NM_CATEGORIA
+ORDER BY VALOR_TOTAL_VENDIDO DESC
 LIMIT 5;
 
 -- G07 — Qual o custo total de compras por fornecedor no periodo?
--- Atende: P2 (hoje nao ha visao nenhuma de gasto por fornecedor, so agenda de celular)
+-- Atende: P1 (hoje nao ha visao nenhuma de gasto por fornecedor, so agenda de celular)
 SELECT
-    f.id_fornecedor,
-    f.nome_razao_social,
-    COUNT(DISTINCT pc.id_pedido_compra)                      AS qtd_pedidos,
-    ROUND(SUM(pcp.quantidade * pcp.preco_unitario_compra), 2) AS custo_total
-FROM fornecedor f
-JOIN pedido_compra pc          ON pc.id_fornecedor = f.id_fornecedor
-JOIN pedido_compra_produto pcp ON pcp.id_pedido_compra = pc.id_pedido_compra
-WHERE pc.status <> 'cancelado'
-GROUP BY f.id_fornecedor, f.nome_razao_social
-ORDER BY custo_total DESC;
+    f.ID_FORNECEDOR,
+    f.NM_FORNECEDOR,
+    COUNT(DISTINCT pc.ID_PEDIDO_COMPRA)                  AS QT_PEDIDOS,
+    ROUND(SUM(i.QT_PEDIDA * i.VL_UNITARIO_COMPRA), 2)    AS CUSTO_TOTAL
+FROM FORNECEDOR f
+JOIN PEDIDO_COMPRA pc        ON pc.ID_FORNECEDOR = f.ID_FORNECEDOR
+JOIN ITEM_PEDIDO_COMPRA i    ON i.ID_PEDIDO_COMPRA = pc.ID_PEDIDO_COMPRA
+WHERE pc.ST_PEDIDO <> 'CANCELADO'
+GROUP BY f.ID_FORNECEDOR, f.NM_FORNECEDOR
+ORDER BY CUSTO_TOTAL DESC;
 
 -- G08 — Qual o percentual de vendas canceladas por canal?
--- Atende: visao gerencial de qualidade de atendimento por canal (balcao/telefone/
--- whatsapp/delivery)
+-- Atende: visao gerencial de qualidade de atendimento por canal (balcao/telefone/whatsapp)
 SELECT
-    canal,
-    COUNT(*)                                                       AS total_vendas,
-    SUM(CASE WHEN status = 'cancelada' THEN 1 ELSE 0 END)          AS canceladas,
-    ROUND(100 * SUM(CASE WHEN status = 'cancelada' THEN 1 ELSE 0 END)
-              / COUNT(*), 1)                                        AS pct_cancelamento
-FROM venda
-GROUP BY canal
-ORDER BY pct_cancelamento DESC;
+    TP_CANAL,
+    COUNT(*)                                                         AS TOTAL_VENDAS,
+    SUM(CASE WHEN ST_VENDA = 'CANCELADA' THEN 1 ELSE 0 END)          AS CANCELADAS,
+    ROUND(100 * SUM(CASE WHEN ST_VENDA = 'CANCELADA' THEN 1 ELSE 0 END)
+              / COUNT(*), 1)                                          AS PCT_CANCELAMENTO
+FROM VENDA
+GROUP BY TP_CANAL
+ORDER BY PCT_CANCELAMENTO DESC;
+
+-- G09 — Qual o saldo atual de cada produto (entradas - saidas - vendido)?
+-- Atende: P2 (saldo automatico, calculado a partir das movimentacoes e das vendas)
+SELECT s.ID_PRODUTO, s.NM_PRODUTO, s.QT_SALDO
+FROM VW_SALDO_ESTOQUE s
+ORDER BY s.NM_PRODUTO;
+
+-- G10 — Quais lotes ja estao vencidos ou vencem nos 7 dias seguintes a 24/10/2026
+-- (ultimo dia de vendas da carga), e de qual fornecedor vieram?
+-- Atende: P6 (validade e procedencia dos lotes, hoje sem rastreabilidade)
+SELECT
+    l.ID_LOTE,
+    l.NR_LOTE,
+    p.NM_PRODUTO,
+    f.NM_FORNECEDOR,
+    l.DT_VALIDADE,
+    DATEDIFF(l.DT_VALIDADE, '2026-10-24') AS DIAS_PARA_VENCER
+FROM LOTE l
+JOIN PRODUTO p        ON p.ID_PRODUTO = l.ID_PRODUTO
+JOIN PEDIDO_COMPRA pc ON pc.ID_PEDIDO_COMPRA = l.ID_PEDIDO_COMPRA
+JOIN FORNECEDOR f     ON f.ID_FORNECEDOR = pc.ID_FORNECEDOR
+WHERE l.DT_VALIDADE <= DATE_ADD('2026-10-24', INTERVAL 7 DAY)
+ORDER BY l.DT_VALIDADE;
+
+-- G11 — Qual o prazo medio real de entrega (pedido -> recebimento) por fornecedor?
+-- Atende: P1 (KPI prazo medio de entrega do fornecedor)
+SELECT
+    f.NM_FORNECEDOR,
+    COUNT(*)                                          AS QT_PEDIDOS_RECEBIDOS,
+    ROUND(AVG(DATEDIFF(pc.DT_RECEBIMENTO, pc.DT_PEDIDO)), 1) AS PRAZO_MEDIO_DIAS
+FROM FORNECEDOR f
+JOIN PEDIDO_COMPRA pc ON pc.ID_FORNECEDOR = f.ID_FORNECEDOR
+WHERE pc.DT_RECEBIMENTO IS NOT NULL
+GROUP BY f.ID_FORNECEDOR, f.NM_FORNECEDOR
+ORDER BY PRAZO_MEDIO_DIAS DESC;
+
+-- G12 — Qual o tempo medio entre saida e entrega do delivery, por entregador?
+-- Atende: KPI tempo de entrega (logistica do delivery)
+SELECT
+    fu.NM_FUNCIONARIO AS ENTREGADOR,
+    COUNT(*)          AS QT_ENTREGAS,
+    ROUND(AVG(TIMESTAMPDIFF(MINUTE, e.DT_HORA_SAIDA, e.DT_HORA_ENTREGA)), 1) AS MIN_MEDIO
+FROM ENTREGA e
+JOIN FUNCIONARIO fu ON fu.ID_FUNCIONARIO = e.ID_FUNCIONARIO_ENTREGADOR
+WHERE e.ST_ENTREGA = 'ENTREGUE'
+GROUP BY fu.ID_FUNCIONARIO, fu.NM_FUNCIONARIO;
 
 
 -- =====================================================================================
 -- 8) CONSULTAS DE AUDITORIA
--- Verificam consistencia e integridade dos dados (coisas que uma FK/CHECK simples
--- nao cobre, por envolverem regra de negocio entre tabelas diferentes).
+-- Verificam consistencia e integridade dos dados (regras de negocio entre tabelas
+-- diferentes, que um CHECK/FK simples nao cobre). A01 devolve linhas de proposito (venda
+-- fiado para cliente nao autorizado, presente na carga); as demais devem devolver 0 linhas.
 -- =====================================================================================
 
 -- A01 — Existe alguma venda fiado para cliente que nao esta autorizado a prazo?
--- Atende: P3 (falha de controle que hoje passa batido na planilha manual)
+-- Atende: P5 (falha de controle que hoje passa batido na planilha manual; RN02)
 SELECT
-    v.id_venda,
-    v.data_hora,
-    c.id_cliente,
-    c.nome_razao_social,
-    c.autorizado_prazo,
-    v.forma_pagamento,
-    v.valor_total
-FROM venda v
-JOIN cliente c ON c.id_cliente = v.id_cliente
-WHERE v.forma_pagamento = 'fiado'
-  AND c.autorizado_prazo = FALSE;
+    v.ID_VENDA,
+    v.DT_HORA_VENDA,
+    c.ID_CLIENTE,
+    c.NM_CLIENTE,
+    c.IN_AUTORIZADO_PRAZO,
+    v.TP_FORMA_PAGAMENTO,
+    t.VL_LIQUIDO
+FROM VENDA v
+JOIN CLIENTE c        ON c.ID_CLIENTE = v.ID_CLIENTE
+JOIN VW_TOTAL_VENDA t ON t.ID_VENDA = v.ID_VENDA
+WHERE v.TP_FORMA_PAGAMENTO = 'FIADO'
+  AND c.IN_AUTORIZADO_PRAZO = 0;
 
--- A02 — Existe alguma venda cujo valor_total nao bate com a soma dos itens
--- (peso_quantidade * preco_unitario) menos o desconto?
--- Atende: consistencia financeira do caixa (conferencia de digitacao)
+-- A02 — Existe alguma venda sem nenhum item (ou com desconto maior que o total dos itens)?
+-- Atende: consistencia financeira do caixa (RN19)
+SELECT v.ID_VENDA, v.DT_HORA_VENDA, v.VL_DESCONTO, t.VL_BRUTO
+FROM VENDA v
+LEFT JOIN VW_TOTAL_VENDA t ON t.ID_VENDA = v.ID_VENDA
+WHERE t.ID_VENDA IS NULL
+   OR t.VL_LIQUIDO < 0;
+
+-- A03 — Existe desconto concedido por alguem que nao e o proprietario?
+-- Atende: P5 / controle de descontos (RN03)
+SELECT v.ID_VENDA, a.NM_FUNCIONARIO AS AUTORIZADOR, a.TP_FUNCAO, v.VL_DESCONTO
+FROM VENDA v
+JOIN FUNCIONARIO a ON a.ID_FUNCIONARIO = v.ID_FUNCIONARIO_AUTORIZADOR
+WHERE a.TP_FUNCAO <> 'PROPRIETARIO';
+
+-- A04 — Existe algum produto sem nenhuma venda concluida nos ultimos 30 dias da carga
+-- (desde 24/09/2026) com saldo em estoque maior que zero (indicio de encalhe/perda)?
+-- Atende: P2 (giro de estoque, complementa o controle de minimo)
 SELECT
-    v.id_venda,
-    v.data_hora,
-    v.valor_total                                   AS valor_total_registrado,
-    v.desconto,
-    ROUND(SUM(vp.peso_quantidade * vp.preco_unitario) - v.desconto, 2) AS valor_total_calculado,
-    ROUND(v.valor_total -
-          (SUM(vp.peso_quantidade * vp.preco_unitario) - v.desconto), 2) AS diferenca
-FROM venda v
-JOIN venda_produto vp ON vp.id_venda = v.id_venda
-GROUP BY v.id_venda, v.data_hora, v.valor_total, v.desconto
-HAVING ABS(diferenca) > 0.01;
+    p.ID_PRODUTO,
+    p.NM_PRODUTO,
+    s.QT_SALDO,
+    MAX(v.DT_HORA_VENDA) AS ULTIMA_VENDA
+FROM PRODUTO p
+JOIN VW_SALDO_ESTOQUE s ON s.ID_PRODUTO = p.ID_PRODUTO
+LEFT JOIN ITEM_VENDA i  ON i.ID_PRODUTO = p.ID_PRODUTO
+LEFT JOIN VENDA v       ON v.ID_VENDA = i.ID_VENDA AND v.ST_VENDA = 'CONCLUIDA'
+WHERE s.QT_SALDO > 0
+GROUP BY p.ID_PRODUTO, p.NM_PRODUTO, s.QT_SALDO
+HAVING ULTIMA_VENDA IS NULL OR ULTIMA_VENDA < '2026-09-24 00:00:00'
+ORDER BY ULTIMA_VENDA;
 
--- A03 — Existe venda fiado/boleto sem data de vencimento ou sem status de pagamento
--- preenchidos? (checagem de completude, alem do que o CHECK ja garante)
--- Atende: P3 (consistencia do controle de prazo)
-SELECT id_venda, forma_pagamento, data_vencimento, status_pagamento
-FROM venda
-WHERE forma_pagamento IN ('fiado', 'boleto')
-  AND (data_vencimento IS NULL OR status_pagamento IS NULL);
+-- A05 — Existe pedido de compra sem nenhum item lancado em ITEM_PEDIDO_COMPRA?
+-- Atende: integridade de negocio (pedido "vazio" nao deveria existir; RN19)
+SELECT pc.ID_PEDIDO_COMPRA, pc.DT_PEDIDO, pc.ST_PEDIDO
+FROM PEDIDO_COMPRA pc
+LEFT JOIN ITEM_PEDIDO_COMPRA i ON i.ID_PEDIDO_COMPRA = pc.ID_PEDIDO_COMPRA
+WHERE i.ID_PEDIDO_COMPRA IS NULL;
 
--- A04 — Existe algum produto sem nenhum movimento de venda nos ultimos 30 dias
--- com estoque atual maior que zero (indicio de encalhe/perda potencial)?
--- Atende: P1 (giro de estoque, complementa o controle de minimo)
-SELECT
-    p.id_produto,
-    p.nome,
-    p.estoque_atual,
-    MAX(v.data_hora) AS ultima_venda
-FROM produto p
-LEFT JOIN venda_produto vp ON vp.id_produto = p.id_produto
-LEFT JOIN venda v          ON v.id_venda = vp.id_venda AND v.status = 'concluida'
-GROUP BY p.id_produto, p.nome, p.estoque_atual
-HAVING ultima_venda IS NULL OR ultima_venda < '2026-09-24 00:00:00'
-ORDER BY ultima_venda;
+-- A06 — Existe item de venda de produto vendido por unidade (UN) com quantidade
+-- fracionada, ou de produto marcado como nao vendavel?
+-- Atende: qualidade do cadastro de produtos e do lancamento de itens (RN01, RN24)
+SELECT i.ID_VENDA, i.ID_PRODUTO, p.NM_PRODUTO, p.TP_UNIDADE_VENDA, i.QT_VENDIDA
+FROM ITEM_VENDA i
+JOIN PRODUTO p ON p.ID_PRODUTO = i.ID_PRODUTO
+WHERE p.IN_VENDAVEL = 0
+   OR (p.TP_UNIDADE_VENDA = 'UN' AND i.QT_VENDIDA <> FLOOR(i.QT_VENDIDA));
 
--- A05 — Existe pedido de compra sem nenhum item lancado em pedido_compra_produto?
--- Atende: integridade referencial de negocio (pedido "vazio" nao deveria existir)
-SELECT pc.id_pedido_compra, pc.data_pedido, pc.status
-FROM pedido_compra pc
-LEFT JOIN pedido_compra_produto pcp ON pcp.id_pedido_compra = pc.id_pedido_compra
-WHERE pcp.id_produto IS NULL;
+-- A07 — Existe entrega de venda de balcao, ou com entregador que nao tem a funcao ENTREGADOR?
+-- Atende: controle da logistica do delivery (RN22)
+SELECT e.ID_ENTREGA, v.ID_VENDA, v.TP_CANAL, fu.NM_FUNCIONARIO, fu.TP_FUNCAO
+FROM ENTREGA e
+JOIN VENDA v        ON v.ID_VENDA = e.ID_VENDA
+JOIN FUNCIONARIO fu ON fu.ID_FUNCIONARIO = e.ID_FUNCIONARIO_ENTREGADOR
+WHERE v.TP_CANAL = 'BALCAO'
+   OR fu.TP_FUNCAO <> 'ENTREGADOR';
 
--- A06 — Existe cliente com CPF/CNPJ duplicado ou vazio apesar de ja ter comprado fiado?
--- Atende: P3/P4 (qualidade do cadastro usado para cobranca)
-SELECT c.id_cliente, c.nome_razao_social, c.cpf_cnpj
-FROM cliente c
-JOIN venda v ON v.id_cliente = c.id_cliente
-WHERE v.forma_pagamento = 'fiado'
-  AND (c.cpf_cnpj IS NULL OR c.cpf_cnpj = '')
-GROUP BY c.id_cliente, c.nome_razao_social, c.cpf_cnpj;
+-- A08 — Existe lote de categoria perecivel sem validade, ou de categoria que exige
+-- inspecao sem registro de inspecao?
+-- Atende: P6 (rastreabilidade sanitaria; RN10, RN16)
+SELECT l.ID_LOTE, l.NR_LOTE, p.NM_PRODUTO, cat.NM_CATEGORIA
+FROM LOTE l
+JOIN PRODUTO p     ON p.ID_PRODUTO = l.ID_PRODUTO
+JOIN CATEGORIA cat ON cat.ID_CATEGORIA = p.ID_CATEGORIA
+WHERE (cat.IN_PERECIVEL = 1 AND l.DT_VALIDADE IS NULL)
+   OR (cat.IN_EXIGE_INSPECAO = 1
+       AND (l.NR_REGISTRO_INSPECAO IS NULL OR l.NR_REGISTRO_INSPECAO = ''));
+
+-- A09 — Existe produto com saldo de estoque negativo?
+-- Atende: P2 (o saldo calculado nunca deveria ficar abaixo de zero; RN23)
+SELECT * FROM VW_SALDO_ESTOQUE WHERE QT_SALDO < 0;
+
+-- A10 — Existe venda a prazo (boleto/fiado) com vencimento fora do limite
+-- (boleto > 15 dias ou fiado > 30 dias depois da venda)?
+-- Atende: P5 (prazo concedido acima da regra; RN05)
+SELECT v.ID_VENDA, v.TP_FORMA_PAGAMENTO,
+       DATEDIFF(v.DT_VENCIMENTO, DATE(v.DT_HORA_VENDA)) AS DIAS_PRAZO
+FROM VENDA v
+WHERE (v.TP_FORMA_PAGAMENTO = 'BOLETO' AND DATEDIFF(v.DT_VENCIMENTO, DATE(v.DT_HORA_VENDA)) > 15)
+   OR (v.TP_FORMA_PAGAMENTO = 'FIADO'  AND DATEDIFF(v.DT_VENCIMENTO, DATE(v.DT_HORA_VENDA)) > 30);
+
