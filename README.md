@@ -48,12 +48,11 @@
 - **Escopo do sistema:** o modelo cobre toda a operação — compras e fornecedores, produtos e categorias, lotes e validade, movimentação de estoque, desossa, vendas e itens, clientes, pagamentos a prazo, entregas e funcionários — e não apenas o estoque. O sistema que a loja já usa (cadastro de produtos, preços e caixa) continua; este banco incorpora o que hoje fica em planilha, agenda do celular e contagem visual.
 - **Justificativa da escolha:** organização real, com processos específicos e ricos (desossa, validade, venda por peso, venda a prazo, delivery) que geram entidades e regras suficientes para um modelo completo, e com acesso direto ao proprietário. *(Declarar aqui, se existir, qualquer vínculo de integrante com a loja ou com os responsáveis — PREENCHER PELO GRUPO.)*
 - **Evidências:** Google Maps: https://share.google/IGnQx2U8OIvA5kZfN · WhatsApp (11) 96283-0823 · CNPJ ativo. Fotos do local e da entrevista como arquivos JPG/PNG em [`evidencias/`](./evidencias/) *(ADICIONAR as fotos ao repositório antes da entrega: fachada, interior/balcão e foto da entrevista)*.
-- **Responsável pela organização:** **[PREENCHER: nome completo]** — proprietário(a) — telefone **[PREENCHER: telefone para contato do professor]**.
+- **Responsável pela organização:** **Ronaldo Ferreira Gomes** — proprietário(a) — telefone **(11) 94743-9766**.
 
 #### Relato da entrevista
 
-- **Quem:** o proprietário da loja **[PREENCHER nome]**; pelo grupo, **[PREENCHER quais integrantes]**.
-- **Quando e onde:** **[PREENCHER datas]**, no próprio estabelecimento. Entrevista 1 (Entrega 1): levantamento geral. Nova visita para esta etapa, feita por Rafael Aceiro: **[PREENCHER data]**, para confirmar o que está marcado como "a confirmar" no [levantamento](./levantamento/levantamento.md).
+- **Quando e onde:** **12/09/2026**, no próprio estabelecimento. Entrevista 1 (Entrega 1): levantamento geral. Nova visita para esta etapa, feita por Rafael Aceiro: para confirmar o que está marcado como "a confirmar" no [levantamento](./levantamento/levantamento.md).
 - **Comprovação:** foto em `evidencias/entrevista.jpg` *(adicionar)*.
 - **Achados da observação presencial** *(separados do que foi dito — PREENCHER na visita)*: como a pesagem e a etiqueta acontecem no balcão, onde a planilha de fiado fica, como a desossa é registrada, se há fechamento de caixa, como é feito o cancelamento de venda e como se anota a entrega.
 - **Resumo do levantamento:** estoque controlado por contagem visual, sem saldo no sistema e sem mínimo; entradas de mercadoria não geram movimento; fornecedores só na agenda do proprietário; perdas da desossa não medidas; venda a prazo (boleto em 15 dias, fiado em até 30) controlada em planilha com 3 vias assinadas; validade só nas embalagens; descontos só com autorização do proprietário; CPF só quando há nota, boleto ou faturamento.
