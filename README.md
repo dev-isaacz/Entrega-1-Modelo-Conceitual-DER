@@ -19,10 +19,8 @@
 | Relatório técnico | este `README.md` |
 | DER conceitual revisado (PNG e SVG) | [`DER_acougue.png`](./DER_acougue.png) · [`DER_acougue.svg`](./DER_acougue.svg) |
 | Modelo lógico (PNG e SVG) | [`modelo_logico.png`](./modelo_logico.png) · [`modelo_logico.svg`](./modelo_logico.svg) |
-| Dicionário de dados (HTML único) | [`docs/dicionario_dados.html`](./docs/dicionario_dados.html) |
-| Script SQL (CREATE DATABASE, tabelas, constraints, views) | [`docs/script.sql`](./docs/script.sql) |
-| Massa de dados (INSERT) | [`docs/massa_de_dados.sql`](./docs/massa_de_dados.sql) |
-| Consultas: SELECT com JOIN, UPDATE, DELETE, gerenciais (G) e de auditoria (A) | [`docs/consultas.sql`](./docs/consultas.sql) |
+| Dicionário de dados (HTML único) | [`dicionario_dados.html`](./dicionario_dados.html) |
+| Script SQL único (CREATE DATABASE, tabelas, constraints, views, massa de dados e consultas) | [`script.sql`](./script.sql) |
 | Levantamento de campo | [`levantamento/levantamento.md`](./levantamento/levantamento.md) |
 | Fotos e evidências (JPG/PNG) | pasta [`evidencias/`](./evidencias/) |
 
@@ -99,7 +97,7 @@
 - **RF16** — Registrar entrega com venda, entregador, endereço, situação e horários de saída e de entrega. *(—)*
 - **RF17** — Cadastrar funcionário com nome, função, telefone e situação (ativo/inativo). *(—)*
 - **RF18** — Cancelar venda ou pedido por mudança de situação, sem apagar o registro. *(—)*
-- **RF19** — Executar as consultas gerenciais (G01–G17) e de auditoria (A01–A17) do `docs/consultas.sql`. *(P1–P6)*
+- **RF19** — Executar as consultas gerenciais (G01–G17) e de auditoria (A01–A17) do `script.sql`. *(P1–P6)*
 
 #### Requisitos não funcionais
 
@@ -163,7 +161,7 @@ DER em [`DER_acougue.png`](./DER_acougue.png), notação brModelo, **sem chaves 
 | Entrega (delivery) fora do modelo | Criada `ENTREGA` ligada a `VENDA` e ao funcionário entregador | O delivery é processo real da loja |
 | FKs desenhadas no DER (feito na revisão anterior) | Mantidas fora do DER; só aparecem no modelo lógico | FK é decisão do modelo lógico |
 | Seção de IA sem "trechos rejeitados" | Seção 6 preenchida com todos os campos | Exigência da disciplina |
-| Entrevista sem data e foto; links quebrados; RGM do Rafael divergente | Datas das visitas (12/09 e 01/10/2026) e fotos registradas; links relativos para arquivos na raiz e em `docs/`; RGM corrigido para 48225223 | Evidência e rastreabilidade |
+| Entrevista sem data e foto; links quebrados; RGM do Rafael divergente | Datas das visitas (12/09 e 01/10/2026) e fotos registradas; links relativos para os arquivos na raiz do repositório; RGM corrigido para 48225223 | Evidência e rastreabilidade |
 
 ### 1.2 Conversão do Modelo Conceitual para o Modelo Lógico
 
@@ -292,19 +290,21 @@ Não há `ON DELETE CASCADE` nem exclusão de histórico, porque a RN18 manda pr
 
 ## 2. Modelo Lógico Relacional
 
-Diagrama: [`modelo_logico.png`](./modelo_logico.png) (SVG em [`modelo_logico.svg`](./modelo_logico.svg)), na notação lógica do brModelo (tabela, coluna com tipo, PK, FK, ligação com (mín,máx)). `NOT NULL`, `UNIQUE`, `CHECK` e `DEFAULT` estão no [dicionário de dados](./docs/dicionario_dados.html) e implementados no [script](./docs/script.sql).
+Diagrama: [`modelo_logico.png`](./modelo_logico.png) (SVG em [`modelo_logico.svg`](./modelo_logico.svg)), na notação lógica do brModelo (tabela, coluna com tipo, PK, FK, ligação com (mín,máx)). `NOT NULL`, `UNIQUE`, `CHECK` e `DEFAULT` estão no [dicionário de dados](./dicionario_dados.html) e implementados no [script](./script.sql).
 
 ## 3. Script SQL Completo
 
-- [`docs/script.sql`](./docs/script.sql): `CREATE DATABASE`, `CREATE TABLE` com PK/FK/NOT NULL/UNIQUE/CHECK/DEFAULT, índices e as duas views.
-- [`docs/massa_de_dados.sql`](./docs/massa_de_dados.sql): `INSERT INTO` da massa fictícia.
-- [`docs/consultas.sql`](./docs/consultas.sql): consultas gerenciais **G01–G17** e de auditoria **A01–A17**, cada uma com cabeçalho (`-- Gnn — pergunta` / `-- Atende: Pn` ou `-- Verifica: RNnn`). As consultas G/A cruzam várias tabelas com `JOIN`; ao final há `UPDATE` (U01, U02) e `DELETE` (D01) de demonstração.
+Arquivo único: [`script.sql`](./script.sql). Ele reúne, nesta ordem:
 
-Ordem de execução: `script.sql` → `massa_de_dados.sql` → `consultas.sql`. O script recria o banco do zero. Testado do zero em banco vazio: script, massa e consultas rodam sem erro.
+- `CREATE DATABASE` e `CREATE TABLE` com PK/FK/NOT NULL/UNIQUE/CHECK/DEFAULT, índices e as duas views;
+- `INSERT INTO` da massa de dados fictícia (seção 4);
+- consultas gerenciais **G01–G17** e de auditoria **A01–A17**, cada uma com cabeçalho (`-- Gnn — pergunta` / `-- Atende: Pn` ou `-- Verifica: RNnn`). As consultas G/A cruzam várias tabelas com `JOIN`; ao final há `UPDATE` (U01, U02) e `DELETE` (D01) de demonstração.
+
+O script recria o banco do zero, então basta executá-lo de uma vez. Testado do zero em banco vazio: criação, massa e consultas rodam sem erro.
 
 ## 4. Massa de Dados
 
-Arquivo: [`docs/massa_de_dados.sql`](./docs/massa_de_dados.sql). **Fictícia**: nomes, telefones (`119000xxxx`), CNPJ e CPF inventados; nenhum dado real da loja (LGPD, RN17). Período simulado: compras desde 28/09/2026 e vendas de 05/10 a 04/11/2026 (30 dias).
+Fica dentro do [`script.sql`](./script.sql), logo após a criação das tabelas. **Fictícia**: nomes, telefones (`119000xxxx`), CNPJ e CPF inventados; nenhum dado real da loja (LGPD, RN17). Período simulado: compras desde 28/09/2026 e vendas de 05/10 a 04/11/2026 (30 dias).
 
 **Como o volume real justifica a quantidade de registros.** A loja faz 300 a 400 vendas por dia (9 a 12 mil por mês). A massa é uma **amostra de cerca de 1% do movimento mensal** — 85 vendas em 30 dias (2 a 4 por dia) —, suficiente para que cada consulta G e A mostre resultado sem tornar o teste inviável em sala. As demais tabelas seguem a rotina informada: compra de peças bovinas 1 a 2 vezes por semana, frango toda semana e suíno/embutidos a cada 15 dias.
 
