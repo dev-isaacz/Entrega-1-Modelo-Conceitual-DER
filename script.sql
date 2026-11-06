@@ -24,7 +24,7 @@ CREATE DATABASE acougue_caroline
 USE acougue_caroline;
 
 -- =====================================================================================
--- 2) CREATE TABLE + CONSTRAINTS (alinhado ao DER conceitual v2.1 e ao modelo logico)
+-- 2) CREATE TABLE 
 -- =====================================================================================
 
 -- FUNCIONARIO: Pessoa física que presta serviço ao estabelecimento em uma função definida (proprietário, açougueiro, balconista, caixa, ajudante geral, entregador ou administrativo/financeiro) e que executa e responde pelas operações registradas no sistema. Difere de CLIENTE e FORNECEDOR, que são partes externas ao estabelecimento.
