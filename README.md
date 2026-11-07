@@ -19,7 +19,7 @@
 | Relatório técnico | este `README.md` |
 | DER conceitual revisado (PNG e SVG) | [`DER_acougue.png`](./DER_acougue.png) · [`DER_acougue.svg`](./DER_acougue.svg) |
 | Modelo lógico (PNG e SVG) | [`modelo_logico.png`](./modelo_logico.png) · [`modelo_logico.svg`](./modelo_logico.svg) |
-| Dicionário de dados (HTML único) | [`dicionario_dados.html`](./dicionario_dados.html) |
+| Dicionário de dados (HTML único) | [`dicionario_dados.html`](dicionarioDados/dicionario_dados.html) |
 | Script SQL único (CREATE DATABASE, tabelas, constraints, views, massa de dados e consultas) | [`script.sql`](./script.sql) |
 | Levantamento de campo | [`levantamento/levantamento.md`](./levantamento/levantamento.md) |
 | Fotos e evidências (JPG/PNG) | pasta [`evidencias/`](./evidencias/) |
